@@ -1,0 +1,70 @@
+# ── Doctorna Healthcare Directory ────────────────────────────────────
+# This folder is a self-contained static site. There is no build step and no
+# dependencies, so almost nothing needs ignoring — these rules exist to stop
+# local clutter and regenerated artefacts from being committed by accident.
+#
+# NOTE: data/*.json is deliberately NOT ignored. Those four files ARE the
+# directory; without them the site has nothing to serve.
+
+# ── local snapshot / export scratch space ────────────────────────────
+# The exporter can be pointed at any --out directory. Keep staging output and
+# published release copies out of git; only data/ is the committed snapshot.
+/staging/
+/staging-*/
+/releases/
+/snapshots/
+data/*.tmp
+data/*.partial
+data/*.bak
+
+# ── verification & scratch files ─────────────────────────────────────
+# Temporary harnesses used while testing the page in a browser.
+_*.html
+*.local.html
+
+# ── logs ─────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── dependencies / build output (none today, guards the future) ──────
+node_modules/
+dist/
+build/
+package-lock.json
+.cache/
+
+# ── secrets — nothing here needs them, so make it impossible ─────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials/
+service-account*.json
+
+# ── databases (the exporter READS one; it must never be committed) ───
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ── editor / OS noise ────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Python bytecode from serve.py ────────────────────────────────────
+__pycache__/
+*.py[cod]
+
+# ── screenshots / captures ───────────────────────────────────────────
+screenshots/
+*.png.tmp

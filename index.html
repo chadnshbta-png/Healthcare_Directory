@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Healthcare Directory — Doctorna</title>
+<meta name="description" content="Search every licensed healthcare professional and facility in the Dubai Health Authority directory — by specialty, facility, language, nationality and licence type.">
+<meta name="theme-color" content="#0F1E32">
+<meta name="app-version" content="3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="icon" href="./favicon.ico" sizes="any">
+</head>
+<body>
+
+<a class="skip-link" href="#results-region">Skip to results</a>
+
+<!-- ══════ UTILITY BAR ══════ -->
+<div class="utility-bar">
+  <div class="shell utility-inner">
+    <p class="utility-note">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Sourced from the Dubai Health Authority professional register</span>
+    </p>
+    <a class="utility-link" href="#for-clinics">For clinics</a>
+    <span class="utility-sep" aria-hidden="true"></span>
+    <a class="utility-link" href="#faq-region">Help</a>
+    <span class="utility-sep" aria-hidden="true"></span>
+    <a class="utility-link" href="#" lang="ar">العربية</a>
+  </div>
+</div>
+
+<!-- ══════ HEADER ══════ -->
+<header class="site-header" id="siteHeader">
+  <div class="shell header-inner">
+    <a class="brand" href="./index.html" aria-label="Doctorna Healthcare Directory, home">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+        <rect width="40" height="40" rx="11" fill="#2899E5"/>
+        <path d="M15 11h6.4a9 9 0 0 1 0 18H15z" fill="#fff"/>
+        <circle cx="15" cy="20" r="2.6" fill="#2899E5"/>
+      </svg>
+      <span class="brand-text">
+        <span class="brand-word">doctorna</span>
+        <span class="brand-sub">Healthcare Directory</span>
+      </span>
+    </a>
+
+    <nav class="site-nav" id="siteNav" aria-label="Primary">
+      <a href="#directory" class="nav-link is-active" data-nav-view="doctors" aria-current="page">Doctors</a>
+      <a href="#directory" class="nav-link" data-nav-view="facilities">Facilities</a>
+      <a href="#specialties-region" class="nav-link">Specialties</a>
+      <a href="#network-region" class="nav-link">Network</a>
+      <a href="#languages-region" class="nav-link">Languages</a>
+      <a href="#faq-region" class="nav-link">Good to know</a>
+    </nav>
+
+    <div class="header-actions">
+      <a class="header-lang" href="#" lang="ar">العربية</a>
+      <button class="btn btn-ghost" type="button" id="savedBtn" aria-label="Saved professionals">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15.3 4.6 18l1-6-4.3-4.2 6-.9L10 1.5l2.7 5.4 6 .9L14.4 12l1 6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <span class="pill" id="savedCount">0</span>
+      </button>
+      <a class="btn btn-primary" href="#for-clinics">List your practice</a>
+    </div>
+
+    <button class="menu-toggle" id="menuToggle" aria-expanded="false" aria-controls="siteNav" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="mainRegion">
+
+<!-- Detail overlay for #/doctor/<id> and #/facility/<id> (js/detail.js) -->
+<section class="detail-host" id="detailHost" hidden></section>
+
+<!-- ══════ HERO ══════ -->
+<section class="hero" id="hero">
+  <div class="shell hero-inner">
+
+    <p class="eyebrow eyebrow-center">
+      <span>DHA Verified</span><i aria-hidden="true"></i><span>Healthcare Directory</span>
+    </p>
+
+    <h1 class="hero-title">
+      Find the right healthcare professional.
+      <em>Backed by real licence data.</em>
+    </h1>
+
+    <p class="hero-sub">
+      Search every licensed healthcare professional and facility on the Dubai Health
+      Authority register — by specialty, facility, language, nationality and licence type.
+    </p>
+
+    <ul class="hero-proof">
+      <li>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Official DHA registry data
+      </li>
+      <li>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.4 3.6 3.6L16 5.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        No inferred or fabricated fields
+      </li>
+      <li>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.4 3.6 3.6L16 5.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Free to search
+      </li>
+    </ul>
+
+    <!-- unified search system -->
+    <form class="searchbar" id="heroSearchForm" role="search">
+      <label class="sfield sfield-main">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="sr-only">Search the directory</span>
+        <input id="heroSearch" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Search doctors, specialists, clinics or hospitals…"
+               aria-label="Search doctors, specialties, facilities or licence number">
+        <button class="sfield-clear" type="button" id="heroSearchClear" hidden aria-label="Clear search">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </label>
+
+      <div class="searchbar-row">
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Category</span>
+            <select id="heroCategory" aria-label="Filter by professional category">
+              <option value="">Any category</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Specialty</span>
+            <select id="heroSpecialty" aria-label="Filter by specialty">
+              <option value="">Any specialty</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Facility</span>
+            <select id="heroFacilityType" aria-label="Filter by facility type">
+              <option value="">Any facility</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <div class="searchbar-submit">
+          <button class="btn btn-primary" type="submit">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            Search
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <div class="popular" id="popularSearches" aria-label="Popular searches">
+      <span class="popular-label">Popular</span>
+    </div>
+
+    <!-- verified dataset figures -->
+    <dl class="hero-stats" id="heroStats" aria-label="Directory size">
+      <div><dd data-stat="doctors">—</dd><dt>Professionals</dt></div>
+      <div><dd data-stat="facilities">—</dd><dt>Facilities</dt></div>
+      <div><dd data-stat="specialties">—</dd><dt>Specialties</dt></div>
+      <div><dd data-stat="links">—</dd><dt>Facility links</dt></div>
+    </dl>
+
+    <p class="hero-source">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 9.2v4.2M10 6.6v.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Register snapshot generated <span id="heroGenerated">—</span>
+    </p>
+
+  </div>
+</section>
+
+<!-- ══════ DIRECTORY ══════ -->
+<section class="directory shell" id="directory">
+
+  <div class="directory-bar">
+    <div class="directory-id">
+      <h2 class="directory-title" id="directoryTitle">Healthcare professionals</h2>
+      <p class="directory-count" aria-live="polite">
+        <strong id="resultCount">Loading…</strong>
+        <span id="resultContext"></span>
+      </p>
+    </div>
+
+    <div class="directory-tools">
+      <div class="seg" role="tablist" aria-label="Result type">
+        <button class="seg-btn is-active" role="tab" aria-selected="true" data-view="doctors" id="tabDoctors" aria-controls="results-region">
+          Doctors <span class="seg-count" data-viewcount="doctors">—</span>
+        </button>
+        <button class="seg-btn" role="tab" aria-selected="false" data-view="facilities" id="tabFacilities" aria-controls="results-region">
+          Facilities <span class="seg-count" data-viewcount="facilities">—</span>
+        </button>
+      </div>
+
+      <button class="btn btn-outline filter-trigger" type="button" id="openFilters" hidden aria-expanded="false" aria-controls="filterPanel">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M6 10h8M8.5 14h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Filters <span class="pill" id="mobileFilterCount" hidden>0</span>
+      </button>
+
+      <label class="select-wrap">
+        <span class="sr-only">Sort results</span>
+        <select id="sortSelect" aria-label="Sort results">
+          <option value="relevance">Sort: Relevance</option>
+          <option value="name-asc">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="specialty">Specialty</option>
+          <option value="facility">Facility</option>
+        </select>
+        <svg class="select-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </label>
+
+      <div class="seg seg-icon" role="group" aria-label="Result layout">
+        <button class="seg-btn is-active" type="button" data-layout="grid" aria-pressed="true" title="Grid view">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.6" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.6" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span class="sr-only">Grid view</span>
+        </button>
+        <button class="seg-btn" type="button" data-layout="list" aria-pressed="false" title="List view">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span class="sr-only">List view</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace">
+
+    <!-- ── FILTER RAIL ── -->
+    <aside class="filter-panel" id="filterPanel" aria-label="Filters">
+      <div class="filter-panel-head">
+        <div class="filter-panel-id">
+          <h3>Filters</h3>
+          <p id="filterSummary">No filters applied</p>
+        </div>
+        <button class="btn btn-quiet" type="button" id="clearAllBtn" disabled>Clear all</button>
+        <button class="drawer-close" type="button" id="drawerClose" aria-label="Close filters">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="filter-scroll" id="filterScroll"><!-- groups injected by js/filters.js --></div>
+      <div class="drawer-foot">
+        <button class="btn btn-outline" type="button" id="drawerClear">Clear all</button>
+        <button class="btn btn-primary" type="button" id="drawerApply">Show <b id="drawerCount">0</b></button>
+      </div>
+    </aside>
+
+    <!-- ── RESULTS ── -->
+    <section class="results" id="results-region" role="tabpanel" aria-labelledby="tabDoctors" tabindex="-1">
+
+      <div class="chip-row" id="chipRow" aria-label="Active filters"></div>
+
+      <!-- loading: skeletons shaped like the real results -->
+      <div class="skeleton-grid" id="stateLoading" aria-hidden="true">
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w70"></i><i class="sk w45"></i></span></div><div class="sk-meta"><i class="sk w85"></i><i class="sk w60"></i></div><div class="sk-tags"><i class="sk sk-tag"></i><i class="sk sk-tag sm"></i></div></article>
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w60"></i><i class="sk w50"></i></span></div><div class="sk-meta"><i class="sk w75"></i><i class="sk w40"></i></div><div class="sk-tags"><i class="sk sk-tag"></i><i class="sk sk-tag sm"></i></div></article>
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w80"></i><i class="sk w40"></i></span></div><div class="sk-meta"><i class="sk w70"></i><i class="sk w55"></i></div><div class="sk-tags"><i class="sk sk-tag"></i></div></article>
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w65"></i><i class="sk w45"></i></span></div><div class="sk-meta"><i class="sk w80"></i><i class="sk w50"></i></div><div class="sk-tags"><i class="sk sk-tag"></i><i class="sk sk-tag sm"></i></div></article>
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w75"></i><i class="sk w40"></i></span></div><div class="sk-meta"><i class="sk w65"></i><i class="sk w60"></i></div><div class="sk-tags"><i class="sk sk-tag"></i></div></article>
+        <article class="sk-card"><div class="sk-top"><span class="sk-avatar"></span><span class="sk-lines"><i class="sk w70"></i><i class="sk w50"></i></span></div><div class="sk-meta"><i class="sk w85"></i><i class="sk w45"></i></div><div class="sk-tags"><i class="sk sk-tag"></i><i class="sk sk-tag sm"></i></div></article>
+      </div>
+      <p class="sr-only" id="loadingText" role="status">Loading the directory…</p>
+
+      <div class="state state-error" id="stateError" hidden>
+        <div class="state-ico state-ico-alert" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 8.5v5m0 3.2v.01M10.3 3.9 2.6 17.3a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 id="errorTitle">Something went wrong while loading the directory.</h3>
+        <p id="errorText">Please try again.</p>
+        <div class="state-actions">
+          <button class="btn btn-primary" type="button" id="retryBtn">Try again</button>
+        </div>
+        <button class="diag-toggle" type="button" id="diagToggle" aria-expanded="false" aria-controls="diagPanel">
+          Technical details
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <pre class="diag" id="diagPanel" hidden></pre>
+      </div>
+
+      <div class="state state-empty" id="stateEmpty" hidden>
+        <div class="state-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <h3 id="emptyTitle">No matches found</h3>
+        <p id="emptyText">Try removing a filter or searching for a broader term.</p>
+        <div class="state-actions">
+          <button class="btn btn-primary" type="button" id="emptyClear">Clear filters</button>
+          <button class="btn btn-outline" type="button" id="emptyReset">Reset search</button>
+        </div>
+      </div>
+
+      <div class="card-grid" id="cardGrid"></div>
+
+      <div class="results-foot" id="resultsFoot" hidden>
+        <p class="showing">Showing <b id="shownCount">0</b> of <b id="totalCount">0</b></p>
+        <button class="btn btn-outline" type="button" id="loadMoreBtn">Load more</button>
+      </div>
+    </section>
+  </div>
+</section>
+
+<!-- ══════ NETWORK (real facility types) ══════ -->
+<section class="section shell" id="network-region">
+  <div class="section-head-row">
+    <div class="section-head">
+      <p class="eyebrow">The network</p>
+      <h2 class="section-title">Explore Dubai's healthcare network, <em>venue by venue.</em></h2>
+      <p class="section-sub">Every facility on the register, grouped by what it is. Counts are tallied from the professionals actually linked to each venue.</p>
+    </div>
+    <button class="arrow-link" type="button" data-jump="fac">
+      Browse all facilities
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="editorial" id="networkGrid"></div>
+</section>
+
+<!-- ══════ TRUST ══════ -->
+<section class="section-tight shell" id="trust-region">
+  <div class="section-head">
+    <p class="eyebrow">The dataset</p>
+    <h2 class="section-title">Healthcare data <em>you can trust.</em></h2>
+  </div>
+
+  <dl class="figures" id="trustFigures">
+    <div><dd data-stat="doctors">&mdash;</dd><dt>Licensed professionals</dt></div>
+    <div><dd data-stat="facilities">&mdash;</dd><dt>Facilities</dt></div>
+    <div><dd data-stat="specialties">&mdash;</dd><dt>Specialties</dt></div>
+    <div><dd data-stat="links">&mdash;</dd><dt>Facility relationships</dt></div>
+  </dl>
+
+  <div class="trust">
+    <div class="trust-item">
+      <div class="trust-ico" aria-hidden="true">
+        <svg viewBox="0 0 20 20"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>DHA verified</h3>
+      <p>Every professional listed here holds a licence type published by the Dubai Health Authority. That badge is a field on the record, not a rating we invented.</p>
+    </div>
+    <div class="trust-item">
+      <div class="trust-ico" aria-hidden="true">
+        <svg viewBox="0 0 20 20"><path d="M5 3h7l3 3v11H5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 3v3h3M7.5 10h5M7.5 13h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <h3>Official licensing data</h3>
+      <p>Categories, specialties, licence types and facility links come straight from the public register — no scraped guesses layered on top.</p>
+    </div>
+    <div class="trust-item">
+      <div class="trust-ico" aria-hidden="true">
+        <svg viewBox="0 0 20 20"><path d="M2.5 10S5.5 4.5 10 4.5 17.5 10 17.5 10 14.5 15.5 10 15.5 2.5 10 2.5 10z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <h3>Transparent about gaps</h3>
+      <p>If the register does not publish a field, we leave it out rather than filling it in. A missing value here means missing at source.</p>
+    </div>
+    <div class="trust-item">
+      <div class="trust-ico" aria-hidden="true">
+        <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.2v4.3l2.8 1.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <h3>Free to search</h3>
+      <p>No account, no paywall, no sponsored placement. Results are ordered by your query and your filters, nothing else.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ FEATURED FACILITIES ══════ -->
+<section class="section shell" id="facilities-region">
+  <div class="section-head-row">
+    <div class="section-head">
+      <p class="eyebrow">Facilities</p>
+      <h2 class="section-title">Explore leading healthcare facilities</h2>
+      <p class="section-sub">The venues with the most licensed professionals on the register, with the specialties they actually practise.</p>
+    </div>
+    <button class="arrow-link" type="button" data-view-jump="facilities">
+      See all facilities
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="fac-grid" id="facilityFeature"></div>
+</section>
+
+<!-- ══════ SPECIALTIES ══════ -->
+<section class="section-tight shell" id="specialties-region">
+  <div class="section-head-row">
+    <div class="section-head">
+      <p class="eyebrow">Specialties</p>
+      <h2 class="section-title">Browse by what you need</h2>
+      <p class="section-sub">The most represented specialties on the register. Choosing one filters the directory above.</p>
+    </div>
+    <button class="arrow-link" type="button" data-jump="spec">
+      View all specialties
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div class="spec-columns" id="specialtyExplorer"></div>
+</section>
+
+<!-- ══════ CTA ══════ -->
+<section class="section-tight shell" id="for-clinics">
+  <div class="cta-band">
+    <div class="cta-inner">
+      <div class="cta-copy">
+        <p class="eyebrow">For clinics</p>
+        <h2>Do you run a healthcare practice?</h2>
+        <p>Make your clinic easier to discover. Claim your facility record, keep your staff list current, and let patients find the right person the first time.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-primary btn-lg" href="#for-clinics">Claim your practice</a>
+        <a class="btn btn-on-dark btn-lg" href="#faq-region">Learn more</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ SEO / CONTENT ══════ -->
+<section class="section-tight shell" id="languages-region">
+  <div class="section-head">
+    <p class="eyebrow">Browse the register</p>
+    <h2 class="section-title">Healthcare in Dubai, from every angle</h2>
+    <p class="section-sub">The same 102,000-record register, indexed the ways people actually search it. Every figure below is counted from the data, not estimated.</p>
+  </div>
+  <div class="seo-grid" id="seoColumns"></div>
+</section>
+
+<!-- ══════ FAQ ══════ -->
+<section class="section-tight shell" id="faq-region">
+  <div class="section-head">
+    <p class="eyebrow">Good to know</p>
+    <h2 class="section-title">Questions, answered plainly.</h2>
+  </div>
+  <div class="faq" id="faqList"></div>
+</section>
+
+</main>
+
+<!-- ══════ FOOTER ══════ -->
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="brand" href="./index.html">
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#2899E5"/><path d="M15 11h6.4a9 9 0 0 1 0 18H15z" fill="#fff"/><circle cx="15" cy="20" r="2.6" fill="#2899E5"/></svg>
+          <span class="brand-text">
+            <span class="brand-word">doctorna</span>
+            <span class="brand-sub">Healthcare Directory</span>
+          </span>
+        </a>
+        <p class="footer-blurb">Healthcare discovery built on the public Dubai Health Authority register. Nothing inferred, nothing sponsored.</p>
+      </div>
+
+      <div class="footer-col">
+        <h3>Directory</h3>
+        <ul>
+          <li><a href="#directory" data-nav-view="doctors">Doctors</a></li>
+          <li><a href="#directory" data-nav-view="facilities">Facilities</a></li>
+          <li><a href="#specialties-region">Specialties</a></li>
+          <li><a href="#network-region">Network</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h3>Browse</h3>
+        <ul>
+          <li><a href="#" data-jump="lang">Languages</a></li>
+          <li><a href="#" data-jump="nat">Nationalities</a></li>
+          <li><a href="#" data-jump="lic">Licence types</a></li>
+          <li><a href="#" data-jump="cat">Categories</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h3>Resources</h3>
+        <ul>
+          <li><a href="#faq-region">Good to know</a></li>
+          <li><a href="#trust-region">About the data</a></li>
+          <li><a href="https://services.dha.gov.ae/sheryan/wps/portal/home/medical-directory" target="_blank" rel="noopener">DHA directory</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h3>For clinics</h3>
+        <ul>
+          <li><a href="#for-clinics">Claim your practice</a></li>
+          <li><a href="#for-clinics">List your practice</a></li>
+          <li><a href="#" lang="ar">العربية</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p id="footerMeta">Directory</p>
+      <p>Data belongs to the Dubai Health Authority. This directory is an independent index of the public register.</p>
+    </div>
+  </div>
+</footer>
+
+<!-- ══════ COOKIE CONSENT ══════ -->
+<aside class="cookie" id="cookieBar" hidden aria-label="Cookie notice">
+  <div class="cookie-text">
+    <h3>A note on storage</h3>
+    <p>Your saved list stays in this browser. Nothing is sent anywhere and nothing is tracked.</p>
+  </div>
+  <div class="cookie-actions">
+    <button class="btn btn-primary btn-sm" type="button" id="cookieAccept">Got it</button>
+    <button class="btn btn-outline btn-sm" type="button" id="cookieDecline">No storage</button>
+  </div>
+</aside>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- Boot guard: classic script, runs even when ES modules are blocked. -->
+<script src="./js/boot-guard.js"></script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
