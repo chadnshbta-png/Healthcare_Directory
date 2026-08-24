@@ -15,10 +15,71 @@ import { fold } from './utils.js';
 const DATA_BASE = new URL('data/', new URL('.', import.meta.url).href.replace(/js\/$/, ''));
 export const dataUrl = (file) => new URL(file, DATA_BASE).href;
 
-/** Row tuple positions, mirroring meta.json ▸ rowSchema. */
+/**
+ * Row tuple positions, mirroring meta.json ▸ rowSchema.
+ *
+ * `FACILITY` holds EITHER a single dictionary index (schema v1, `facilityIdx`)
+ * OR an array of them (schema v2, `facilityIdxs`) — a professional may hold
+ * several concurrent facility relationships. Never read this slot directly;
+ * use `rowFacilityIdxs()` so both shapes behave identically.
+ */
 export const R = {
   ID: 0, NAME: 1, CATEGORY: 2, SPECIALTY: 3, LICENCE: 4, NATIONALITY: 5, FACILITY: 6, LANGUAGES: 7, FLAGS: 8,
 };
+
+/**
+ * Every facility dictionary index for a row, as an array, in published order.
+ *
+ * Accepts both row schemas, drops the -1 "no facility" sentinel, and removes
+ * duplicates so the same facility can never be listed twice.
+ */
+export function rowFacilityIdxs(r) {
+  const v = r[R.FACILITY];
+  if (typeof v === 'number') return v >= 0 ? [v] : [];
+  if (!Array.isArray(v) || v.length === 0) return [];
+  const out = [];
+  for (const idx of v) if (idx >= 0 && !out.includes(idx)) out.push(idx);
+  return out;
+}
+
+/** How many facilities a row links to. Cheap; avoids allocating for the common cases. */
+export function rowFacilityCount(r) {
+  const v = r[R.FACILITY];
+  if (typeof v === 'number') return v >= 0 ? 1 : 0;
+  return Array.isArray(v) ? rowFacilityIdxs(r).length : 0;
+}
+
+/**
+ * Visit each facility index of a row WITHOUT allocating.
+ *
+ * `rowFacilityIdxs` is the readable form, but it builds an array per call —
+ * which costs 100k+ allocations in the load-time tallies and in facet counting.
+ * This is the same logic for callers on a hot path. Duplicates are skipped.
+ */
+export function forEachFacilityIdx(r, fn) {
+  const v = r[R.FACILITY];
+  if (typeof v === 'number') {
+    if (v >= 0) fn(v);
+    return;
+  }
+  if (!Array.isArray(v)) return;
+  for (let k = 0; k < v.length; k++) {
+    const idx = v[k];
+    if (idx < 0) continue;
+    let dup = false;
+    for (let j = 0; j < k; j++) if (v[j] === idx) { dup = true; break; }
+    if (!dup) fn(idx);
+  }
+}
+
+/** True when the row links to any facility whose index is in `set`. */
+export function rowHasFacilityIn(r, set) {
+  const v = r[R.FACILITY];
+  if (typeof v === 'number') return v >= 0 && set.has(v);
+  if (!Array.isArray(v)) return false;
+  for (let k = 0; k < v.length; k++) if (v[k] >= 0 && set.has(v[k])) return true;
+  return false;
+}
 
 /** Bit flags stored in row[R.FLAGS]. */
 export const FLAG = { MOBILE: 1, EMAIL: 2, LINKEDIN: 4, EXPERIENCE: 8, EDUCATION: 16 };
@@ -36,8 +97,10 @@ export const db = {
   facilityByDictIdx: new Map(),
   /** facility.id -> up to 3 { label, count } specialties, tallied from rows */
   facilitySpecialties: new Map(),
-  /** rowFType[i] = index into dict.facilityType for rows[i], or -1 */
+  /** rowFType[i] = facilityType index of rows[i]'s FIRST facility, or -1 */
   rowFType: null,
+  /** rowIdx -> additional facilityType indices, only for multi-type rows */
+  rowFTypeExtra: new Map(),
   /** facility-type rollup: [{ i, type, label, facilities, doctors }] */
   facilityTypes: [],
   ready: false,
@@ -144,12 +207,14 @@ export async function loadDirectory(onStage = () => {}) {
   const perFacility = new Map();
   for (let i = 0; i < db.rows.length; i++) {
     const r = db.rows[i];
-    const fi = r[R.FACILITY];
     const si = r[R.SPECIALTY];
-    if (fi < 0 || si < 0) continue;
-    let tally = perFacility.get(fi);
-    if (!tally) perFacility.set(fi, (tally = new Map()));
-    tally.set(si, (tally.get(si) ?? 0) + 1);
+    if (si < 0) continue;
+    // A professional linked to several facilities counts toward each of them.
+    forEachFacilityIdx(r, (fi) => {
+      let tally = perFacility.get(fi);
+      if (!tally) perFacility.set(fi, (tally = new Map()));
+      tally.set(si, (tally.get(si) ?? 0) + 1);
+    });
   }
   db.facilitySpecialties = new Map();
   for (const [fi, tally] of perFacility) {
@@ -197,20 +262,34 @@ function buildFacilityTypes() {
     typeOfFacilityIdx[i] = indexOfType.get(db.facilities[i].type || 'other');
   }
 
+  // Fast path: one Int16 per row for its FIRST facility's type, which is all
+  // the overwhelming majority of rows need. Rows linked to facilities of
+  // several DIFFERENT types keep the remainder in a side map, so the hot filter
+  // loop stays a single typed-array read and only rare rows cost more.
   const rowFType = new Int16Array(db.rows.length);
+  const rowFTypeExtra = new Map();
   const doctorCount = new Array(order.length).fill(0);
   for (let i = 0; i < db.rows.length; i++) {
-    const fi = db.rows[i][R.FACILITY];
-    if (fi >= 0 && fi < typeOfFacilityIdx.length) {
+    let primary = -1;
+    let extra = null;
+    forEachFacilityIdx(db.rows[i], (fi) => {
+      if (fi >= typeOfFacilityIdx.length) return;
       const ti = typeOfFacilityIdx[fi];
-      rowFType[i] = ti;
-      doctorCount[ti] += 1;
-    } else {
-      rowFType[i] = -1;
-    }
+      if (primary === -1) primary = ti;
+      else if (ti !== primary) {
+        if (!extra) extra = [];
+        if (!extra.includes(ti)) extra.push(ti);
+      }
+    });
+    rowFType[i] = primary;
+    if (extra) rowFTypeExtra.set(i, extra);
+    // A doctor counts once per distinct type they practise under.
+    if (primary >= 0) doctorCount[primary] += 1;
+    if (extra) for (const ti of extra) doctorCount[ti] += 1;
   }
 
   db.rowFType = rowFType;
+  db.rowFTypeExtra = rowFTypeExtra;
   db.typeOfFacilityIdx = typeOfFacilityIdx;
   db.dict.facilityType = order;
   db.facets.facilityType = order.map((t, i) => ({ i, label: t, count: doctorCount[i] }))
@@ -228,8 +307,31 @@ export const rowCategory = (r) => (r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CAT
 export const rowSpecialty = (r) => (r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '');
 export const rowLicence = (r) => (r[R.LICENCE] >= 0 ? db.dict.licenseType[r[R.LICENCE]] : '');
 export const rowNationality = (r) => (r[R.NATIONALITY] >= 0 ? db.dict.nationality[r[R.NATIONALITY]] : '');
-export const rowFacilityName = (r) => (r[R.FACILITY] >= 0 ? db.dict.facility[r[R.FACILITY]] : '');
-export const rowFacility = (r) => (r[R.FACILITY] >= 0 ? db.facilityByDictIdx.get(r[R.FACILITY]) ?? null : null);
+/** Name of the row's FIRST facility (compact contexts such as result cards). */
+export const rowFacilityName = (r) => {
+  const [first] = rowFacilityIdxs(r);
+  return first === undefined ? '' : db.dict.facility[first] ?? '';
+};
+
+/** The row's FIRST facility record, or null. */
+export const rowFacility = (r) => {
+  const [first] = rowFacilityIdxs(r);
+  return first === undefined ? null : db.facilityByDictIdx.get(first) ?? null;
+};
+
+/**
+ * EVERY facility a row links to, resolved to records.
+ *
+ * A facility present in the dictionary but absent from facilities.json (a name
+ * seen on a professional that never became a facility row) still yields an
+ * entry, with `record: null`, so the name is shown rather than silently lost.
+ */
+export const rowFacilities = (r) =>
+  rowFacilityIdxs(r).map((idx) => ({
+    idx,
+    name: db.dict.facility[idx] ?? '',
+    record: db.facilityByDictIdx.get(idx) ?? null,
+  })).filter((f) => f.name !== '');
 export const rowLanguages = (r) => (r[R.LANGUAGES] || []).map((i) => db.dict.language[i]).filter(Boolean);
 export const rowHas = (r, flag) => (r[R.FLAGS] & flag) !== 0;
 

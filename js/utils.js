@@ -54,10 +54,52 @@ export const FACILITY_TYPE_LABEL = {
   dental: 'Dental',
   laboratory: 'Laboratory',
   optical: 'Optical',
-  other: 'Other / unclassified',
+  // The register publishes NO facility type field — see the note on the
+  // Facility type filter. This bucket is every facility whose name carried
+  // no recognisable keyword, which is a gap in the source, not a category.
+  other: 'Type not published',
 };
 
-/** Full licence-type names (DHA codes). */
+/**
+ * Display-only gloss for specialties the public knows by a plainer name.
+ *
+ *   ...Otolaryngology...          reads as "... - ENT"
+ *   ...Ophthalmology...           reads as "... - Eye"
+ *   ...Orthopedic/Orthopaedic...  reads as "... - Bone/Joint"
+ *
+ * The rules are SUBSTRING rules, so they hold wherever the term sits in the
+ * stored wording and whatever title, grade or qualifier surrounds it.
+ *
+ * The register's own wording is kept verbatim and the gloss is appended, so the
+ * stored value is still the thing on screen — nothing is renamed, merged or
+ * invented. This is a LABEL map: it never touches the dictionary, the facets,
+ * the filter state or any query. `Specialist Otolaryngology` is still the value
+ * that gets filtered on; it just reads as `Specialist Otolaryngology - ENT`.
+ */
+const SPECIALTY_GLOSS = [
+  { match: 'otolaryngology', gloss: 'ENT' },
+  { match: 'ophthalmology', gloss: 'Eye' },
+  // Both spellings the register uses. Deliberately NOT the shorter 'orthop',
+  // which would also catch Orthoptist (an eye specialty); and nothing here
+  // touches Orthodontics (dental) or Orthotics (devices), which merely share
+  // the ortho- prefix.
+  { match: 'orthopedic', gloss: 'Bone/Joint' },
+  { match: 'orthopaedic', gloss: 'Bone/Joint' },
+];
+
+export const specialtyLabel = (label) => {
+  if (!label) return label;
+  const lower = label.toLowerCase();
+  for (const { match, gloss } of SPECIALTY_GLOSS) {
+    if (!lower.includes(match)) continue;
+    // Idempotent: a label that already carries the gloss is returned as-is, so
+    // a value passed through here twice cannot come out as "- ENT - ENT".
+    return label.includes(` - ${gloss}`) ? label : `${label} - ${gloss}`;
+  }
+  return label;
+};
+
+/** Full licence-type names (register licence codes). */
 export const LICENCE_LABEL = {
   FTL: 'Full-time licence',
   PTL: 'Part-time licence',

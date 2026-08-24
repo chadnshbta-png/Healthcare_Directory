@@ -30,7 +30,6 @@ logs/
 node_modules/
 dist/
 build/
-package-lock.json
 .cache/
 
 # ── secrets — nothing here needs them, so make it impossible ─────────
@@ -68,3 +67,10 @@ __pycache__/
 # ── screenshots / captures ───────────────────────────────────────────
 screenshots/
 *.png.tmp
+
+# ── generated audit artefacts (backend/) ─────────────────────────────
+# Kept locally for audit; regenerate with
+#   node scripts/seed-facilities-from-specialities.mjs --dry-run
+specialities-unmatched-review.json
+specialities-collapsed-review.json
+specialities-proposed-relationships.json

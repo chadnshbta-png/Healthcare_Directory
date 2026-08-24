@@ -46,7 +46,7 @@ import { $, $$, debounce, scrollToEl } from './utils.js';
  * dies on a null reference, stranding the visitor on the loading skeleton.
  * This handshake detects that split and repairs it.
  */
-const APP_VERSION = '3';
+const APP_VERSION = '4';
 
 let matches = [];
 
@@ -247,6 +247,7 @@ function wireControls() {
   };
   $('#clearAllBtn').addEventListener('click', doClear);
   $('#drawerClear').addEventListener('click', doClear);
+  $('#railReset').addEventListener('click', doClear);   // same handler, new affordance
   $('#emptyClear').addEventListener('click', doClear);
   $('#emptyReset').addEventListener('click', () => {
     state.q = '';

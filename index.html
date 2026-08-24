@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Healthcare Directory — Doctorna</title>
-<meta name="description" content="Search every licensed healthcare professional and facility in the Dubai Health Authority directory — by specialty, facility, language, nationality and licence type.">
+<meta name="description" content="Search every licensed healthcare professional and facility on the official public register — by specialty, facility, language, nationality and licence type.">
 <meta name="theme-color" content="#0F1E32">
-<meta name="app-version" content="3">
+<meta name="app-version" content="4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -23,7 +23,7 @@
   <div class="shell utility-inner">
     <p class="utility-note">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Sourced from the Dubai Health Authority professional register</span>
+      <span>Sourced from the official healthcare professional register</span>
     </p>
     <a class="utility-link" href="#for-clinics">For clinics</a>
     <span class="utility-sep" aria-hidden="true"></span>
@@ -82,7 +82,7 @@
   <div class="shell hero-inner">
 
     <p class="eyebrow eyebrow-center">
-      <span>DHA Verified</span><i aria-hidden="true"></i><span>Healthcare Directory</span>
+      <span>Verified</span><i aria-hidden="true"></i><span>Healthcare Directory</span>
     </p>
 
     <h1 class="hero-title">
@@ -91,14 +91,14 @@
     </h1>
 
     <p class="hero-sub">
-      Search every licensed healthcare professional and facility on the Dubai Health
-      Authority register — by specialty, facility, language, nationality and licence type.
+      Search every licensed healthcare professional and facility on the official public
+      register — by specialty, facility, language, nationality and licence type.
     </p>
 
     <ul class="hero-proof">
       <li>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Official DHA registry data
+        Official register data
       </li>
       <li>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.4 3.6 3.6L16 5.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -186,6 +186,56 @@
 <!-- ══════ DIRECTORY ══════ -->
 <section class="directory shell" id="directory">
 
+  <!-- One control band: primary switch on the left, tools on the right. -->
+  <div class="directory-controls">
+  <div class="view-tabs" role="tablist" aria-label="Result type">
+    <button class="view-tab is-active" role="tab" aria-selected="true" data-view="doctors" id="tabDoctors" aria-controls="results-region">
+      <span class="view-tab-num" data-viewcount="doctors">—</span>
+      <span class="view-tab-label">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.6" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 16.4c0-3 2.7-5 6-5s6 2 6 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Doctors
+      </span>
+    </button>
+    <button class="view-tab" role="tab" aria-selected="false" data-view="facilities" id="tabFacilities" aria-controls="results-region">
+      <span class="view-tab-num" data-viewcount="facilities">—</span>
+      <span class="view-tab-label">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Facilities
+      </span>
+    </button>
+    </div>
+
+    <div class="directory-tools">
+    <button class="btn btn-outline filter-trigger" type="button" id="openFilters" hidden aria-expanded="false" aria-controls="filterPanel">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M6 10h8M8.5 14h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Filters <span class="pill" id="mobileFilterCount" hidden>0</span>
+    </button>
+
+    <label class="select-wrap">
+      <span class="sr-only">Sort results</span>
+      <select id="sortSelect" aria-label="Sort results">
+        <option value="relevance">Sort: Relevance</option>
+        <option value="name-asc">Name A–Z</option>
+        <option value="name-desc">Name Z–A</option>
+        <option value="specialty">Specialty</option>
+        <option value="facility">Facility</option>
+      </select>
+      <svg class="select-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </label>
+
+    <div class="seg seg-icon" role="group" aria-label="Result layout">
+      <button class="seg-btn is-active" type="button" data-layout="grid" aria-pressed="true" title="Grid view">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.6" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.6" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span class="sr-only">Grid view</span>
+      </button>
+      <button class="seg-btn" type="button" data-layout="list" aria-pressed="false" title="List view">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span class="sr-only">List view</span>
+      </button>
+    </div>
+  </div>
+  </div>
+
   <div class="directory-bar">
     <div class="directory-id">
       <h2 class="directory-title" id="directoryTitle">Healthcare professionals</h2>
@@ -195,44 +245,6 @@
       </p>
     </div>
 
-    <div class="directory-tools">
-      <div class="seg" role="tablist" aria-label="Result type">
-        <button class="seg-btn is-active" role="tab" aria-selected="true" data-view="doctors" id="tabDoctors" aria-controls="results-region">
-          Doctors <span class="seg-count" data-viewcount="doctors">—</span>
-        </button>
-        <button class="seg-btn" role="tab" aria-selected="false" data-view="facilities" id="tabFacilities" aria-controls="results-region">
-          Facilities <span class="seg-count" data-viewcount="facilities">—</span>
-        </button>
-      </div>
-
-      <button class="btn btn-outline filter-trigger" type="button" id="openFilters" hidden aria-expanded="false" aria-controls="filterPanel">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M6 10h8M8.5 14h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        Filters <span class="pill" id="mobileFilterCount" hidden>0</span>
-      </button>
-
-      <label class="select-wrap">
-        <span class="sr-only">Sort results</span>
-        <select id="sortSelect" aria-label="Sort results">
-          <option value="relevance">Sort: Relevance</option>
-          <option value="name-asc">Name A–Z</option>
-          <option value="name-desc">Name Z–A</option>
-          <option value="specialty">Specialty</option>
-          <option value="facility">Facility</option>
-        </select>
-        <svg class="select-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-      </label>
-
-      <div class="seg seg-icon" role="group" aria-label="Result layout">
-        <button class="seg-btn is-active" type="button" data-layout="grid" aria-pressed="true" title="Grid view">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.6" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="2.6" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.6" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.4" y="11.4" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-          <span class="sr-only">Grid view</span>
-        </button>
-        <button class="seg-btn" type="button" data-layout="list" aria-pressed="false" title="List view">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-          <span class="sr-only">List view</span>
-        </button>
-      </div>
-    </div>
   </div>
 
   <div class="workspace">
@@ -241,17 +253,30 @@
     <aside class="filter-panel" id="filterPanel" aria-label="Filters">
       <div class="filter-panel-head">
         <div class="filter-panel-id">
-          <h3>Filters</h3>
+          <h3>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M6 10h8M8.5 14h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            Filters
+            <span class="filter-count-badge" id="filterCountBadge" hidden>0</span>
+          </h3>
           <p id="filterSummary">No filters applied</p>
         </div>
-        <button class="btn btn-quiet" type="button" id="clearAllBtn" disabled>Clear all</button>
+        <button class="btn btn-quiet" type="button" id="clearAllBtn" disabled>Reset</button>
         <button class="drawer-close" type="button" id="drawerClose" aria-label="Close filters">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
       </div>
       <div class="filter-scroll" id="filterScroll"><!-- groups injected by js/filters.js --></div>
+
+      <!-- Desktop foot: filters apply live, so this reports the result of the
+           current selection rather than offering a no-op "Apply". -->
+      <div class="filter-panel-foot">
+        <p class="filter-foot-count"><b id="railCount">0</b> <span id="railNoun">results</span></p>
+        <button class="btn btn-outline btn-sm" type="button" id="railReset">Reset</button>
+      </div>
+
+      <!-- Mobile drawer foot: here "Show N" is meaningful — it closes the drawer. -->
       <div class="drawer-foot">
-        <button class="btn btn-outline" type="button" id="drawerClear">Clear all</button>
+        <button class="btn btn-outline" type="button" id="drawerClear">Reset</button>
         <button class="btn btn-primary" type="button" id="drawerApply">Show <b id="drawerCount">0</b></button>
       </div>
     </aside>
@@ -304,7 +329,7 @@
 
       <div class="results-foot" id="resultsFoot" hidden>
         <p class="showing">Showing <b id="shownCount">0</b> of <b id="totalCount">0</b></p>
-        <button class="btn btn-outline" type="button" id="loadMoreBtn">Load more</button>
+        <button class="btn btn-outline btn-more" type="button" id="loadMoreBtn"><span id="loadMoreLabel">Load more</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v11M6 11l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </section>
   </div>
@@ -345,8 +370,8 @@
       <div class="trust-ico" aria-hidden="true">
         <svg viewBox="0 0 20 20"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <h3>DHA verified</h3>
-      <p>Every professional listed here holds a licence type published by the Dubai Health Authority. That badge is a field on the record, not a rating we invented.</p>
+      <h3>Verified</h3>
+      <p>Every professional marked verified holds a licence type published on the official register. That badge is a field on the record, not a rating we invented.</p>
     </div>
     <div class="trust-item">
       <div class="trust-ico" aria-hidden="true">
@@ -454,7 +479,7 @@
             <span class="brand-sub">Healthcare Directory</span>
           </span>
         </a>
-        <p class="footer-blurb">Healthcare discovery built on the public Dubai Health Authority register. Nothing inferred, nothing sponsored.</p>
+        <p class="footer-blurb">Healthcare discovery built on the public licensing register. Nothing inferred, nothing sponsored.</p>
       </div>
 
       <div class="footer-col">
@@ -482,7 +507,7 @@
         <ul>
           <li><a href="#faq-region">Good to know</a></li>
           <li><a href="#trust-region">About the data</a></li>
-          <li><a href="https://services.dha.gov.ae/sheryan/wps/portal/home/medical-directory" target="_blank" rel="noopener">DHA directory</a></li>
+          <li><a href="https://services.dha.gov.ae/sheryan/wps/portal/home/medical-directory" target="_blank" rel="noopener">Official register</a></li>
         </ul>
       </div>
 

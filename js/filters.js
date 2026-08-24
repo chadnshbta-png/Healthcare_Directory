@@ -5,7 +5,7 @@
  */
 import { db } from './data.js';
 import { state, MULTI, TOGGLES } from './state.js';
-import { $, esc, num, fold, LICENCE_LABEL, FACILITY_TYPE_LABEL } from './utils.js';
+import { $, esc, num, fold, LICENCE_LABEL, FACILITY_TYPE_LABEL, specialtyLabel } from './utils.js';
 import { facetCounts, toggleCounts } from './query.js';
 
 const CHECK = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2 6.2 2.6 2.6L10 3.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -18,8 +18,14 @@ const SEARCH_ICO = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" c
  */
 const GROUPS = [
   { key: 'cat', stateKey: 'categories', title: 'Professional category', dict: 'category', style: 'chips', open: true },
-  { key: 'spec', stateKey: 'specialties', title: 'Specialty', dict: 'specialty', style: 'list', open: true, searchable: true, initial: 8 },
-  { key: 'ftype', stateKey: 'facilityTypes', title: 'Facility type', dict: 'facilityType', style: 'chips', open: true, labelMap: FACILITY_TYPE_LABEL },
+  { key: 'spec', stateKey: 'specialties', title: 'Specialty', dict: 'specialty', style: 'list', open: true, searchable: true, initial: 8, labelFn: specialtyLabel },
+  {
+    key: 'ftype', stateKey: 'facilityTypes', title: 'Facility type', dict: 'facilityType',
+    style: 'chips', open: true, labelMap: FACILITY_TYPE_LABEL,
+    // The one facet not taken from a published field. Saying so is the
+    // difference between a filter and a claim.
+    note: 'The register publishes no facility type. These are read from the facility name.',
+  },
   { key: 'fac', stateKey: 'facilities', title: 'Facility', dict: 'facility', style: 'list', open: true, searchable: true, initial: 6 },
   { key: 'lang', stateKey: 'languages', title: 'Language', dict: 'language', style: 'list', open: false, searchable: true, initial: 8 },
   { key: 'nat', stateKey: 'nationalities', title: 'Nationality', dict: 'nationality', style: 'list', open: false, searchable: true, initial: 8 },
@@ -52,6 +58,7 @@ function groupShell(g) {
   return `<section class="fgroup" data-group="${g.key}" data-open="${g.open}">
     ${head(g.key, g.title, g.open)}
     <div class="fgroup-body" id="fgroup-${g.key}">
+      ${g.note ? `<p class="fgroup-note">${esc(g.note)}</p>` : ''}
       ${g.searchable ? `<div class="fgroup-tools">
         <label class="opt-search">${SEARCH_ICO}
           <input type="search" data-optsearch="${g.key}" placeholder="Search ${esc(g.title.toLowerCase())}…" aria-label="Search ${esc(g.title)} options">
@@ -83,7 +90,9 @@ function flagsShell() {
 }
 
 /** Some facets store a key ('hospital') but should read as a label. */
-const display = (g, label) => (g.labelMap && g.labelMap[label]) || label;
+// Display only. The VALUE a group filters on is always the stored label; this
+// just decides how that value reads on screen.
+const display = (g, label) => (g.labelMap && g.labelMap[label]) || (g.labelFn ? g.labelFn(label) : label);
 
 /** One checkbox row. */
 const optionRow = (g, o, selected) => `
@@ -109,13 +118,30 @@ export function refreshFilters(matches) {
       .map((o) => ({ label: o.label, count: counts.get(o.i) ?? 0 }))
       .filter((o) => o.count > 0 || selected.has(o.label));
 
+    // Option search runs over the DISPLAYED label, so a gloss is findable by
+    // the abbreviation a reader actually knows ("ENT"). The stored value is
+    // still what gets filtered on — this only decides which rows are offered.
+    let rank = () => 0;
     if (memory.search) {
       const q = fold(memory.search);
       options = options.filter((o) => fold(display(g, o.label)).includes(q));
+
+      // A short query is a substring of plenty of unrelated words ("ent" is
+      // inside Dental, Resident, Gastroenterology), which buries the rows the
+      // reader meant. Rows whose gloss or word-start matches the query are
+      // offered first; everything else keeps its place below them.
+      // `fold` leaves only lowercase alphanumerics and single spaces, so a
+      // word-start test is a plain string check — no regex, nothing to escape.
+      rank = (o) => {
+        const shown = display(g, o.label);
+        if (shown !== o.label && fold(shown.slice(o.label.length)).includes(q)) return -2;
+        const folded = fold(shown);
+        return folded.startsWith(q) || folded.includes(` ${q}`) ? -1 : 0;
+      };
     }
 
     // Selected values are pinned above the rest so a choice never scrolls away.
-    const byCount = (a, b) => b.count - a.count || display(g, a.label).localeCompare(display(g, b.label));
+    const byCount = (a, b) => rank(a) - rank(b) || b.count - a.count || display(g, a.label).localeCompare(display(g, b.label));
     const picked = options.filter((o) => selected.has(o.label)).sort(byCount);
     const rest = options.filter((o) => !selected.has(o.label)).sort(byCount);
 
@@ -128,7 +154,7 @@ export function refreshFilters(matches) {
       const chip = (o) => `
         <button class="seg-chip" type="button" role="switch" aria-pressed="${selected.has(o.label)}"
                 data-facet="${g.key}" data-value="${esc(o.label)}"
-                ${g.labelMap?.[o.label] ? `title="${esc(g.labelMap[o.label])}"` : ''}>
+                ${display(g, o.label) !== o.label ? `title="${esc(display(g, o.label))}"` : ''}>
           ${esc(display(g, o.label))} <span class="opt-count">${num(o.count)}</span>
         </button>`;
       host.innerHTML = `<div class="seg-row">${[...picked, ...rest].map(chip).join('')}</div>`;

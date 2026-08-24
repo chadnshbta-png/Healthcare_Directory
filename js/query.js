@@ -4,7 +4,9 @@
  * Everything runs against the compact row tuples from data.js, so a full pass
  * over 102k professionals stays in the low milliseconds. No DOM here.
  */
-import { db, R, FLAG } from './data.js';
+import {
+  db, R, FLAG, rowFacilityIdxs, rowFacilityCount, forEachFacilityIdx, rowHasFacilityIn,
+} from './data.js';
 import { state, MULTI } from './state.js';
 import { fold } from './utils.js';
 
@@ -18,7 +20,7 @@ const TOGGLE_FLAG = {
 };
 /** Toggles derived from row shape rather than a single flag bit. */
 const TOGGLE_TEST = {
-  facility: (row) => row[R.FACILITY] >= 0,
+  facility: (row) => rowFacilityCount(row) > 0,
   languages: (row) => row[R.LANGUAGES].length > 0,
   contact: (row) => (row[R.FLAGS] & (FLAG.MOBILE | FLAG.EMAIL)) !== 0,
 };
@@ -77,7 +79,7 @@ function rowMatchesTerms(row, i, matchers, rawQ, idQuery) {
     if (name.includes(m.t)) continue;
     if (row[R.SPECIALTY] >= 0 && m.spec.has(row[R.SPECIALTY])) continue;
     if (row[R.CATEGORY] >= 0 && m.cat.has(row[R.CATEGORY])) continue;
-    if (row[R.FACILITY] >= 0 && m.fac.has(row[R.FACILITY])) continue;
+    if (m.fac.size && rowHasFacilityIn(row, m.fac)) continue;
     return false;
   }
   return true;
@@ -110,8 +112,15 @@ export function runQuery() {
     const row = rows[i];
     if (sets.cat && !sets.cat.has(row[R.CATEGORY])) continue;
     if (sets.spec && !sets.spec.has(row[R.SPECIALTY])) continue;
-    if (sets.fac && !sets.fac.has(row[R.FACILITY])) continue;
-    if (sets.ftype && !sets.ftype.has(db.rowFType[i])) continue;
+    if (sets.fac && !rowHasFacilityIn(row, sets.fac)) continue;
+    if (sets.ftype) {
+      let hit = sets.ftype.has(db.rowFType[i]);
+      if (!hit) {
+        const extra = db.rowFTypeExtra.get(i);
+        if (extra) for (const ti of extra) if (sets.ftype.has(ti)) { hit = true; break; }
+      }
+      if (!hit) continue;
+    }
     if (sets.nat && !sets.nat.has(row[R.NATIONALITY])) continue;
     if (sets.lic && !sets.lic.has(row[R.LICENCE])) continue;
     if (toggleMask && (row[R.FLAGS] & toggleMask) !== toggleMask) continue;
@@ -156,10 +165,18 @@ export function facetCounts(facetKey, current) {
   const counts = new Map();
   const rows = db.rows;
   if (facetKey === 'ftype') {
-    // Not a column on the row tuple — it lives in the parallel rowFType array.
+    // Not a column on the row tuple — it lives in the parallel rowFType array,
+    // plus a side map for rows spanning facilities of several types.
     for (const i of matches) {
       const v = db.rowFType[i];
       if (v >= 0) counts.set(v, (counts.get(v) ?? 0) + 1);
+      const extra = db.rowFTypeExtra.get(i);
+      if (extra) for (const ti of extra) counts.set(ti, (counts.get(ti) ?? 0) + 1);
+    }
+  } else if (facetKey === 'fac') {
+    // A professional at several facilities counts toward each of them.
+    for (const i of matches) {
+      forEachFacilityIdx(rows[i], (fi) => counts.set(fi, (counts.get(fi) ?? 0) + 1));
     }
   } else if (facetKey === 'lang') {
     for (const i of matches) {
@@ -230,7 +247,12 @@ export function sortMatches(matches, sort) {
     }
     case 'facility': {
       const ff = db.foldedFacility;
-      const key = (i) => (rows[i][R.FACILITY] >= 0 ? ff[rows[i][R.FACILITY]] : '￿');
+      // Sorted on the FIRST facility; a row with several has no single
+      // position, and the published order is the meaningful one.
+      const key = (i) => {
+        const [first] = rowFacilityIdxs(rows[i]);
+        return first === undefined ? '￿' : ff[first];
+      };
       return matches.sort((a, b) => {
         const ka = key(a), kb = key(b);
         return ka < kb ? -1 : ka > kb ? 1 : byName(a, b);
@@ -266,8 +288,7 @@ export function facilityResults(matchedRowIdx) {
     // Only facilities represented by the matching professionals.
     const counts = new Map();
     for (const i of matchedRowIdx) {
-      const fi = rows[i][R.FACILITY];
-      if (fi >= 0) counts.set(fi, (counts.get(fi) ?? 0) + 1);
+      forEachFacilityIdx(rows[i], (fi) => counts.set(fi, (counts.get(fi) ?? 0) + 1));
     }
     list = [];
     for (const [fi, n] of counts) {
