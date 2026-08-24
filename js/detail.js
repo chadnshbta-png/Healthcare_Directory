@@ -7,7 +7,7 @@
  * as an empty row.
  */
 import {
-  db, R, FLAG, rowFacility, rowFacilities, rowFacilityIdxs, rowLanguages, rowHas,
+  db, R, FLAG, rowFacility, rowFacilities, rowFacilityIdxs, rowLanguages, rowHas, rowLicences,
   facilityTopSpecialties,
   doctorSourceUrl, facilityHref, doctorHref,
 } from './data.js';
@@ -243,7 +243,8 @@ function doctorView(id) {
   const name = r[R.NAME];
   const category = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
   const specialty = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
-  const licence = r[R.LICENCE] >= 0 ? db.dict.licenseType[r[R.LICENCE]] : '';
+  const licences = rowLicences(r);
+  const licence = licences[0] ?? '';
   const nationality = r[R.NATIONALITY] >= 0 ? db.dict.nationality[r[R.NATIONALITY]] : '';
   // A professional may hold several concurrent facility relationships.
   const facilities = rowFacilities(r);
@@ -326,7 +327,8 @@ function doctorView(id) {
 
         ${block('Licensing information', licence
           ? `<dl class="factlist">
-              ${field('Licence type', `${esc(LICENCE_LABEL[licence] ?? licence)} <span class="mono dim">(${esc(licence)})</span>`)}
+              ${field(licences.length > 1 ? 'Licence types' : 'Licence type',
+                licences.map((l) => `<span class="tag tag-brand">${esc(LICENCE_LABEL[l] ?? l)} <span class="mono dim">(${esc(l)})</span></span>`).join(' '))}
             </dl>`
           : '')}
 

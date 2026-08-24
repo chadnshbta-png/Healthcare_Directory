@@ -112,15 +112,66 @@ const facilityIndexById = new Map(facilities.map((f, i) => [f.id, i]));
  * Current placements come first, then oldest-recorded.
  */
 const linksByDoctorId = new Map();
+const pastLinksByDoctorId = new Map();
+const relStats = { current: 0, historical: 0, unknownFacility: 0 };
 for (const l of db.prepare(`
-  select df.doctorId, df.facilityId
+  select df.doctorId, df.facilityId, df.isCurrent, df.relationType
   from DoctorFacility df
   order by df.isCurrent desc, df.createdAt asc`).all()) {
   const idx = facilityIndexById.get(l.facilityId);
-  if (idx === undefined) continue;
-  let list = linksByDoctorId.get(l.doctorId);
-  if (!list) linksByDoctorId.set(l.doctorId, (list = []));
+  if (idx === undefined) { relStats.unknownFacility++; continue; }
+
+  // CURRENT means the register still lists the placement: a live licence
+  // (specialities), the search stage's own facility, or an experience entry DHA
+  // marked "(Present)". Everything else is a job the professional has LEFT.
+  //
+  // Both are kept — DoctorFacility is the authoritative relationship layer and
+  // nothing is collapsed — but only current placements answer "where does this
+  // person work", so publishing a former employer as a facility would be a
+  // regression dressed up as more data.
+  const isCurrent =
+    l.isCurrent === 1 ||
+    l.relationType === 'current_license' ||
+    l.relationType === 'search_stage';
+
+  const bucket = isCurrent ? linksByDoctorId : pastLinksByDoctorId;
+  relStats[isCurrent ? 'current' : 'historical']++;
+  let list = bucket.get(l.doctorId);
+  if (!list) bucket.set(l.doctorId, (list = []));
   if (!list.includes(idx)) list.push(idx);
+}
+
+/**
+ * Licence-TYPE membership, per doctor.
+ *
+ * A professional can hold several licence types at once — the register's own
+ * filter buckets sum to more than the population. `Doctor.licenseType` is the
+ * search API's single PRIMARY value, so a facet built from it undercounts every
+ * bucket but the biggest (Part-time read 32 against the register's ~3,684).
+ *
+ * DoctorLicenceType is the authoritative set. When it has not been populated
+ * yet the export falls back to the scalar and SAYS SO in meta, rather than
+ * quietly shipping a number that looks fine and is not.
+ */
+const licenceTypesByDoctorId = new Map();
+let licenceTypeSource = 'doctor_licence_type';
+{
+  const hasTable = db
+    .prepare("select count(*) as n from sqlite_master where type='table' and name='DoctorLicenceType'")
+    .get().n > 0;
+  const rowCount = hasTable
+    ? db.prepare('select count(*) as n from DoctorLicenceType').get().n
+    : 0;
+
+  if (rowCount > 0) {
+    for (const l of db.prepare('select doctorId, licenceType from DoctorLicenceType').iterate()) {
+      let list = licenceTypesByDoctorId.get(l.doctorId);
+      if (!list) licenceTypesByDoctorId.set(l.doctorId, (list = []));
+      if (!list.includes(l.licenceType)) list.push(l.licenceType);
+    }
+  } else {
+    licenceTypeSource = 'doctor_scalar_fallback';
+  }
 }
 
 // ── doctors ─────────────────────────────────────────────────────────────────
@@ -133,25 +184,42 @@ const stmt = db.prepare(`
 
 const norm = (s) => (s === null || s === undefined ? '' : String(s).replace(/\s+/g, ' ').trim());
 
+/** The search DTO's codes, expanded to the register's own filter vocabulary. */
+const PRIMARY_LICENCE_LABEL = {
+  FTL: 'Full-time License',
+  PTL: 'Part-time License',
+  REG: 'Registered Only',
+  TRL: 'Trainee License',
+};
+
+/** Professionals the relationship layer cannot place. Reported, never hidden. */
+let doctorsWithNoFacility = 0;
+
 for (const d of stmt.iterate()) {
   const spec = norm(d.speciality);
   const dash = spec.indexOf('-');
   const category = dash > 0 ? spec.slice(0, dash).trim() : spec;
   const specialty = dash > 0 ? spec.slice(dash + 1).trim() : '';
 
-  // Prefer the relational links. Fall back to Doctor.facility only when the
-  // join has nothing for this doctor, so a facility known solely from the
-  // search stage is still published rather than dropped.
-  let facIdxs = linksByDoctorId.get(d.id) ?? [];
-  if (facIdxs.length === 0) {
-    const facName = norm(d.facility);
-    if (facName) {
-      facIdxs = [
-        facilityIndexByName.has(facName)
-          ? facilityIndexByName.get(facName)
-          : intern('facility', facName),
-      ];
-    }
+  // DoctorFacility is the ONLY source of facilities. There is deliberately no
+  // fallback to the Doctor.facility scalar: every scalar that resolves to a
+  // real facility is already a `search_stage` row in the join, so a fallback
+  // would only ever re-add names the matcher REFUSED to resolve — publishing a
+  // guess as though it were a relationship. Doctors left with none are counted
+  // in meta.exclusions instead of being papered over.
+  const facIdxs = linksByDoctorId.get(d.id) ?? [];
+  if (facIdxs.length === 0) doctorsWithNoFacility++;
+  // Former placements, kept distinct from current ones.
+  const pastIdxs = (pastLinksByDoctorId.get(d.id) ?? []).filter((i) => !facIdxs.includes(i));
+
+  // The doctor's licence-type SET. Falls back to the primary scalar only when
+  // the join table is empty, and meta records which of the two was used.
+  const licenceNames = licenceTypesByDoctorId.get(d.id)
+    ?? (norm(d.licenseType) ? [PRIMARY_LICENCE_LABEL[norm(d.licenseType)] ?? norm(d.licenseType)] : []);
+  const licenceIdxs = [];
+  for (const name of licenceNames) {
+    const i = intern('licenseType', name);
+    if (i >= 0 && !licenceIdxs.includes(i)) licenceIdxs.push(i);
   }
 
   const langs = norm(d.languages)
@@ -172,11 +240,12 @@ for (const d of stmt.iterate()) {
     norm(d.name),
     intern('category', category),
     intern('specialty', specialty),
-    intern('licenseType', norm(d.licenseType)),
+    licenceIdxs,
     intern('nationality', norm(d.nationality)),
     facIdxs,
     langs,
     flags,
+    pastIdxs,
   ]);
 }
 db.close();
@@ -218,6 +287,8 @@ const facetList = (kind, counts, extra = () => ({})) =>
 const facets = {
   category: facetList('category', countBy((r) => r[2])),
   specialty: facetList('specialty', countBy((r) => r[3])),
+  // r[4] is an ARRAY now, so countBy's array branch counts a doctor once in
+  // EVERY bucket they belong to — which is the whole point.
   licenseType: facetList('licenseType', countBy((r) => r[4])),
   nationality: facetList('nationality', countBy((r) => r[5])),
   language: facetList('language', countBy((r) => r[7])),
@@ -227,8 +298,12 @@ const facets = {
 const withContact = rows.filter((r) => r[8] & (FLAG.MOBILE | FLAG.EMAIL)).length;
 const meta = {
   generatedAt: new Date().toISOString(),
-  // v2: row slot 6 is facilityIdxs (an ARRAY) rather than a single facilityIdx.
-  version: 2,
+  // v3: row slot 4 is licenceTypeIdxs (an ARRAY) rather than a single index —
+  // a professional can hold several licence types at once. Slot 6 became an
+  // array in v2 for the same reason on the facility side.
+  version: 3,
+  /** Which source the licence-type facet was built from. */
+  licenceTypeSource,
   totals: {
     doctors: rows.length,
     facilities: facilities.length,
@@ -241,8 +316,20 @@ const meta = {
     languages: facets.language.length,
     doctorsWithContact: withContact,
   },
+  /**
+   * What the export deliberately leaves out, so an absence is measurable
+   * rather than mysterious. Anything counted here is a known gap, not a bug.
+   */
+  exclusions: {
+    /**
+     * Professionals with no resolvable facility relationship. Their facility
+     * name either was never published or did not match exactly one Facility
+     * row, and the export refuses to guess.
+     */
+    doctorsWithNoFacility,
+  },
   flags: FLAG,
-  rowSchema: ['id', 'name', 'categoryIdx', 'specialtyIdx', 'licenseTypeIdx', 'nationalityIdx', 'facilityIdxs', 'languageIdxs', 'flags'],
+  rowSchema: ['id', 'name', 'categoryIdx', 'specialtyIdx', 'licenceTypeIdxs', 'nationalityIdx', 'facilityIdxs', 'languageIdxs', 'flags', 'pastFacilityIdxs'],
 };
 
 const write = (file, obj) => {
@@ -254,9 +341,12 @@ const write = (file, obj) => {
 write('meta.json', meta);
 write('facets.json', { version: 1, dict, facets });
 write('facilities.json', { version: 1, facilities });
-write('doctors.json', { version: 2, count: rows.length, rows });
+write('doctors.json', { version: 3, count: rows.length, rows });
 
 console.log('\ndone.');
 console.log(`  doctors    ${meta.totals.doctors.toLocaleString()}`);
 console.log(`  facilities ${meta.totals.facilities.toLocaleString()}`);
+console.log(`  licence types  ${facets.licenseType.map((x) => `${x.label}=${x.count}`).join(' · ')}`);
+console.log(`  licence source ${licenceTypeSource}`);
+console.log(`  no facility    ${doctorsWithNoFacility.toLocaleString()} professionals (excluded, see meta.exclusions)`);
 console.log(`  specialties ${meta.totals.specialties} · categories ${meta.totals.categories} · languages ${meta.totals.languages} · nationalities ${meta.totals.nationalities}`);

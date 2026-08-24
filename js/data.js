@@ -24,6 +24,9 @@ export const dataUrl = (file) => new URL(file, DATA_BASE).href;
  * use `rowFacilityIdxs()` so both shapes behave identically.
  */
 export const R = {
+  // LICENCE is an ARRAY of dictionary indices (schema v3): the register lets
+  // one professional hold several licence types at once. FACILITY has been an
+  // array since v2 for the same reason.
   ID: 0, NAME: 1, CATEGORY: 2, SPECIALTY: 3, LICENCE: 4, NATIONALITY: 5, FACILITY: 6, LANGUAGES: 7, FLAGS: 8,
 };
 
@@ -305,7 +308,26 @@ export const rowId = (r) => r[R.ID];
 export const rowName = (r) => r[R.NAME];
 export const rowCategory = (r) => (r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '');
 export const rowSpecialty = (r) => (r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '');
-export const rowLicence = (r) => (r[R.LICENCE] >= 0 ? db.dict.licenseType[r[R.LICENCE]] : '');
+/**
+ * EVERY licence type this professional holds.
+ *
+ * Tolerates the v2 scalar so a directory still holding an older doctors.json
+ * keeps working: a number becomes a one-element list, -1 becomes empty.
+ */
+export function rowLicenceIdxs(r) {
+  const v = r[R.LICENCE];
+  if (typeof v === 'number') return v >= 0 ? [v] : [];
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  for (const i of v) if (i >= 0 && !out.includes(i)) out.push(i);
+  return out;
+}
+
+export const rowLicences = (r) =>
+  rowLicenceIdxs(r).map((i) => db.dict.licenseType[i]).filter(Boolean);
+
+/** The first licence type, for places with room for exactly one badge. */
+export const rowLicence = (r) => rowLicences(r)[0] ?? '';
 export const rowNationality = (r) => (r[R.NATIONALITY] >= 0 ? db.dict.nationality[r[R.NATIONALITY]] : '');
 /** Name of the row's FIRST facility (compact contexts such as result cards). */
 export const rowFacilityName = (r) => {
@@ -336,6 +358,24 @@ export const rowLanguages = (r) => (r[R.LANGUAGES] || []).map((i) => db.dict.lan
 export const rowHas = (r, flag) => (r[R.FLAGS] & flag) !== 0;
 
 /** The facility-type key for a facility record ('other' when unclassified). */
+/**
+ * When Healthcare was last successfully synchronized with ScrapeFlow.
+ *
+ * Written by tools/publish.mjs AFTER a dataset has been validated and swapped
+ * in, so its presence means "this data passed reconciliation", not merely
+ * "a script ran". Absent on a directory published before atomic publishing
+ * existed, which is why every caller treats it as optional.
+ */
+export async function loadSyncStatus() {
+  try {
+    const res = await fetch(dataUrl('sync-status.json'), { cache: 'no-cache' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export const facilityTypeKey = (facility) => (facility && facility.type) || 'other';
 
 /** Top three specialties practised at a facility, derived from linked rows. */

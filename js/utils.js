@@ -101,11 +101,36 @@ export const specialtyLabel = (label) => {
 
 /** Full licence-type names (register licence codes). */
 export const LICENCE_LABEL = {
+  // The search DTO's compact codes (schema v2 and earlier).
   FTL: 'Full-time licence',
   PTL: 'Part-time licence',
   REG: 'Registered only',
   TRL: 'Trainee licence',
+  // The register's own filter vocabulary, which is what DoctorLicenceType
+  // stores and therefore what schema v3 exports. Both forms are mapped so a
+  // directory on either schema reads correctly.
+  'Full-time License': 'Full-time licence',
+  'Part-time License': 'Part-time licence',
+  'Registered Only': 'Registered only',
+  'Trainee License': 'Trainee licence',
 };
+
+/**
+ * The compact form, for places with room for a badge and not a sentence.
+ *
+ * A professional can now carry several licence badges on one card, so the long
+ * vocabulary would wrap the card. The full wording stays in the `title` and on
+ * the detail page.
+ */
+export const LICENCE_SHORT = {
+  'Full-time License': 'FTL',
+  'Part-time License': 'PTL',
+  'Registered Only': 'REG',
+  'Trainee License': 'TRL',
+};
+
+/** Badge text for a licence value, whichever vocabulary it came from. */
+export const licenceBadge = (v) => LICENCE_SHORT[v] ?? v;
 
 export const scrollToEl = (el) => {
   if (!el) return;

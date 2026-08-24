@@ -22,7 +22,7 @@
  *   2. A broken decorative section can never take the directory down, and never
  *      leaves an empty headed section on the page.
  */
-import { loadDirectory, db, DataLoadError } from './data.js';
+import { loadDirectory, loadSyncStatus, db, DataLoadError } from './data.js';
 import {
   state, MULTI, readUrl, writeUrl, clearAll, isFiltered,
   loadSaved, persistSaved,
@@ -30,7 +30,7 @@ import {
 import { primeSearchIndex, runQuery, sortMatches, facilityResults } from './query.js';
 import { initFilters, refreshFilters, resetFilterUi, openGroup, GROUPS } from './filters.js';
 import {
-  renderCards, renderChips, renderCounts, showState, setProgress,
+  renderCards, renderChips, renderCounts, renderSyncStatus, showState, setProgress,
   renderHeroStats, renderHeroSelects, renderPopular, renderNetwork,
   renderFacilityFeature, renderSpecialtyExplorer, renderSeoColumns, renderFaq,
 } from './render.js';
@@ -624,6 +624,9 @@ function renderDirectory() {
 /** Discovery sections. Each is independent, optional, and self-hiding on error. */
 function renderSections() {
   step('hero figures', renderHeroStats);
+  // Optional and non-blocking: a directory published before atomic
+  // publishing existed has no sync-status.json, and that must not fail boot.
+  loadSyncStatus().then((s) => { if (s) renderSyncStatus(s); }).catch(() => {});
   step('hero selects', () => { renderHeroSelects(); syncHeroSelects(); });
   step('popular searches', renderPopular);
   step('network grid', renderNetwork, { section: '#network-region' });

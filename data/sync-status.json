@@ -1,0 +1,26 @@
+{
+  "lastSuccessfulSyncAt": "2026-08-24T18:00:27.419Z",
+  "schemaVersion": 3,
+  "licenceTypeSource": "doctor_licence_type",
+  "totals": {
+    "doctors": 102424,
+    "facilities": 5652,
+    "facilitiesWithDoctors": 5579,
+    "doctorFacilityLinks": 158607,
+    "specialties": 441,
+    "categories": 5,
+    "nationalities": 167,
+    "languages": 74,
+    "doctorsWithContact": 22395
+  },
+  "exclusions": {
+    "doctorsWithNoFacility": 30413
+  },
+  "relationships": null,
+  "reconciliation": {
+    "ok": true,
+    "failures": 0,
+    "notes": 5
+  },
+  "rollbackAvailable": true
+}

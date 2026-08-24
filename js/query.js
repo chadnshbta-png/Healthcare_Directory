@@ -6,6 +6,7 @@
  */
 import {
   db, R, FLAG, rowFacilityIdxs, rowFacilityCount, forEachFacilityIdx, rowHasFacilityIn,
+  rowLicenceIdxs,
 } from './data.js';
 import { state, MULTI } from './state.js';
 import { fold } from './utils.js';
@@ -122,7 +123,15 @@ export function runQuery() {
       if (!hit) continue;
     }
     if (sets.nat && !sets.nat.has(row[R.NATIONALITY])) continue;
-    if (sets.lic && !sets.lic.has(row[R.LICENCE])) continue;
+    // A doctor matches a licence filter if ANY of their types is selected —
+    // someone Full-time at one facility and Part-time at another belongs in
+    // both facets, and must not be deduplicated into whichever came first.
+    if (sets.lic) {
+      const licIdxs = rowLicenceIdxs(row);
+      let hit = false;
+      for (const i of licIdxs) if (sets.lic.has(i)) { hit = true; break; }
+      if (!hit) continue;
+    }
     if (toggleMask && (row[R.FLAGS] & toggleMask) !== toggleMask) continue;
     if (toggleTests.length) {
       let pass = true;
@@ -181,6 +190,13 @@ export function facetCounts(facetKey, current) {
   } else if (facetKey === 'lang') {
     for (const i of matches) {
       for (const l of rows[i][R.LANGUAGES]) counts.set(l, (counts.get(l) ?? 0) + 1);
+    }
+  } else if (facetKey === 'lic') {
+    // A professional holding several licence types counts toward EACH bucket,
+    // exactly as the register's own filter does. This is why the four buckets
+    // legitimately sum to more than the number of professionals.
+    for (const i of matches) {
+      for (const li of rowLicenceIdxs(rows[i])) counts.set(li, (counts.get(li) ?? 0) + 1);
     }
   } else {
     for (const i of matches) {

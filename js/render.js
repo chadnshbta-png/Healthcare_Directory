@@ -7,10 +7,11 @@
  */
 import {
   db, R, FLAG, rowFacility, rowFacilityCount, rowLanguages, rowHas, facilityTopSpecialties,
+  rowLicences,
   doctorHref, facilityHref,
 } from './data.js';
 import { state, MULTI, TOGGLES, activeFilterCount } from './state.js';
-import { $, esc, num, initials, FACILITY_TYPE_LABEL, LICENCE_LABEL, specialtyLabel } from './utils.js';
+import { $, esc, num, initials, FACILITY_TYPE_LABEL, LICENCE_LABEL, licenceBadge, specialtyLabel } from './utils.js';
 
 const ICON = {
   facility: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -38,7 +39,8 @@ function doctorCard(rowIdx) {
   const name = r[R.NAME];
   const category = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
   const specialty = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
-  const licence = r[R.LICENCE] >= 0 ? db.dict.licenseType[r[R.LICENCE]] : '';
+  const licences = rowLicences(r);
+  const licence = licences[0] ?? '';
   const nationality = r[R.NATIONALITY] >= 0 ? db.dict.nationality[r[R.NATIONALITY]] : '';
   const facility = rowFacility(r);
   const facilityName = facility ? facility.name : '';
@@ -60,9 +62,15 @@ function doctorCard(rowIdx) {
   if (langs.length) meta.push(`<div class="meta-row langs">${ICON.chat}<span>${esc(langs.slice(0, 3).join(' · '))}${langs.length > 3 ? ` +${langs.length - 3}` : ''}</span></div>`);
 
   const marks = [];
-  if (licence) marks.push(VERIFIED);
-  if (licence) marks.push(`<span class="tag" title="${esc(LICENCE_LABEL[licence] ?? licence)}">${esc(licence)}</span>`);
-  else if (rowHas(r, FLAG.MOBILE) || rowHas(r, FLAG.EMAIL)) marks.push('<span class="tag tag-brand">Contactable</span>');
+  if (licences.length) marks.push(VERIFIED);
+  // EVERY licence type the professional holds gets a badge. A card must not
+  // imply someone is only Full-time when they are also Part-time elsewhere.
+  for (const l of licences) {
+    marks.push(`<span class="tag" title="${esc(LICENCE_LABEL[l] ?? l)}">${esc(licenceBadge(l))}</span>`);
+  }
+  if (licences.length === 0 && (rowHas(r, FLAG.MOBILE) || rowHas(r, FLAG.EMAIL))) {
+    marks.push('<span class="tag tag-brand">Contactable</span>');
+  }
 
   return `<article class="card">
     <div class="card-mark">${marks.join('')}</div>
@@ -208,6 +216,22 @@ export function renderHeroStats() {
   const when = new Date(db.meta.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   $('#heroGenerated').textContent = when;
   $('#footerMeta').textContent = `Register snapshot generated ${when}`;
+}
+
+/**
+ * Show when the directory was last synchronized, when the publisher recorded it.
+ *
+ * Kept separate from the snapshot date above: `generatedAt` is when the data was
+ * exported, `lastSuccessfulSyncAt` is when a validated dataset actually went
+ * live. They differ whenever a publish is refused.
+ */
+export function renderSyncStatus(status) {
+  const el = $('#footerMeta');
+  if (!el || !status?.lastSuccessfulSyncAt) return;
+  const when = new Date(status.lastSuccessfulSyncAt).toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  el.textContent = `${el.textContent} · last synchronized ${when}`;
 }
 
 /* ═══ hero search selects ═══════════════════════════════════ */

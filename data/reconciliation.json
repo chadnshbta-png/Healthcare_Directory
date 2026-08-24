@@ -1,0 +1,140 @@
+{
+  "generatedAt": "2026-08-24T18:00:27.378Z",
+  "dataDir": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\Healthcare_Directory\\data.staging",
+  "dbPath": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\backend\\prisma\\dev.db",
+  "ok": true,
+  "source": {
+    "doctors": 102424,
+    "facilities": 5652,
+    "relationships": 398027,
+    "currentRelationships": 307611,
+    "distinctCurrentPairs": 158607,
+    "licenceRows": 108896,
+    "licenceByType": [
+      {
+        "licenceType": "Full-time License",
+        "n": 72374
+      },
+      {
+        "licenceType": "Part-time License",
+        "n": 3677
+      },
+      {
+        "licenceType": "Registered Only",
+        "n": 32813
+      },
+      {
+        "licenceType": "Trainee License",
+        "n": 32
+      }
+    ],
+    "doctorsWithNoCurrentRel": 30413,
+    "duplicateRelationships": 0,
+    "orphanRelationships": 0,
+    "collapsedStillStored": 12417
+  },
+  "export": {
+    "doctors": 102424,
+    "facilities": 5652,
+    "currentPairs": 158607,
+    "doctorsWithNoFacility": 30413,
+    "doctorsMultiFacility": 14936,
+    "maxFacilitiesPerDoctor": 47,
+    "doctorsMultiLicence": 6442,
+    "schemaVersion": 3,
+    "licenceTypeSource": "doctor_licence_type",
+    "licenceFacet": {
+      "Full-time License": 72374,
+      "Registered Only": 32813,
+      "Part-time License": 3677,
+      "Trainee License": 32
+    }
+  },
+  "checks": [
+    {
+      "name": "doctor count matches the source",
+      "level": "PASS",
+      "detail": "export 102424 vs db 102424"
+    },
+    {
+      "name": "meta.totals.doctors agrees with the rows",
+      "level": "PASS",
+      "detail": "meta 102424 vs rows 102424"
+    },
+    {
+      "name": "facility count matches the source",
+      "level": "PASS",
+      "detail": "export 5652 vs db 5652"
+    },
+    {
+      "name": "no duplicate doctor ids in the export",
+      "level": "PASS",
+      "detail": "0 duplicates"
+    },
+    {
+      "name": "no doctor references the same facility twice",
+      "level": "PASS",
+      "detail": "0 doctors"
+    },
+    {
+      "name": "no orphan relationships in the source",
+      "level": "PASS",
+      "detail": "0 rows point at a missing doctor or facility"
+    },
+    {
+      "name": "no duplicate relationships in the source",
+      "level": "PASS",
+      "detail": "0 duplicate identity keys"
+    },
+    {
+      "name": "every current doctor-facility pair is exported",
+      "level": "PASS",
+      "detail": "export 158607 vs db 158607"
+    },
+    {
+      "name": "multi-facility doctors are present",
+      "level": "PASS",
+      "detail": "14936 doctors with 2+ facilities, max 47"
+    },
+    {
+      "name": "every licence-type facet matches the source",
+      "level": "PASS",
+      "detail": "Full-time License: export 72374 vs db 72374 | Part-time License: export 3677 vs db 3677 | Registered Only: export 32813 vs db 32813 | Trainee License: export 32 vs db 32"
+    },
+    {
+      "name": "licence type is modelled as a set",
+      "level": "PASS",
+      "detail": "schema v3 (v3 introduced the licence-type array)"
+    },
+    {
+      "name": "residual placeholder membership",
+      "level": "NOTE",
+      "detail": "4357 rows still from the primary scalar vs 104539 from a filter pass — professionals the latest passes did not return"
+    },
+    {
+      "name": "professionals with no current facility",
+      "level": "NOTE",
+      "detail": "30413 in the export / 30413 in the source — facility name absent or unresolvable"
+    },
+    {
+      "name": "the export agrees with the source on who has no facility",
+      "level": "PASS",
+      "detail": "export 30413 vs db 30413"
+    },
+    {
+      "name": "profiles still holding a collapsed facility list",
+      "level": "NOTE",
+      "detail": "12417 — run scripts/backfill-collapsed-facilities.mjs"
+    },
+    {
+      "name": "relationship rows by kind",
+      "level": "NOTE",
+      "detail": "total 398027, current 307611, distinct current pairs 158607"
+    },
+    {
+      "name": "multi-licence doctors in the export",
+      "level": "NOTE",
+      "detail": "6442"
+    }
+  ]
+}
