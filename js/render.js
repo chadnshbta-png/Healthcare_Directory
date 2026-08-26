@@ -11,7 +11,7 @@ import {
   doctorHref, facilityHref,
 } from './data.js';
 import { state, MULTI, TOGGLES, activeFilterCount } from './state.js';
-import { $, esc, num, initials, FACILITY_TYPE_LABEL, LICENCE_LABEL, licenceBadge, specialtyLabel } from './utils.js';
+import { $, esc, num, initials, facilityTypeLabel, LICENCE_LABEL, licenceBadge, specialtyLabel } from './utils.js';
 
 const ICON = {
   facility: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -91,7 +91,7 @@ function doctorCard(rowIdx) {
 
 /* ═══ facility card (results view) ══════════════════════════ */
 function facilityCard(f) {
-  const type = f.type ? (FACILITY_TYPE_LABEL[f.type] ?? f.type) : '';
+  const type = facilityTypeLabel(f.type);
   const shown = f.matchingDoctors ?? f.doctorCount;
   const partial = f.matchingDoctors !== undefined && f.matchingDoctors !== f.doctorCount;
   const top = facilityTopSpecialties(f);
@@ -119,10 +119,70 @@ function facilityCard(f) {
   </article>`;
 }
 
+/* ═══ facility row (list view) ══════════════════════════════ */
+/**
+ * The list view is a different shape of answer, not the grid card lying on its
+ * side. A row is read left-to-right in one pass:
+ *
+ *   [glyph] name + verification        type · specialties      staffing   actions
+ *
+ * so the eye lands on the name, then on what the place IS, then on how big it
+ * is, then on what it can do. The grid card stacks the same facts because a
+ * narrow column has no horizontal room to rank them.
+ *
+ * Every field is the same one the grid card shows — nothing is dropped to make
+ * the row tidier, and nothing is added that the record does not carry.
+ */
+function facilityRow(f) {
+  const type = facilityTypeLabel(f.type);
+  const shown = f.matchingDoctors ?? f.doctorCount;
+  const partial = f.matchingDoctors !== undefined && f.matchingDoctors !== f.doctorCount;
+  const top = facilityTopSpecialties(f);
+
+  return `<article class="frow">
+    <div class="frow-ident">
+      <span class="frow-glyph" aria-hidden="true">${ICON.facility}</span>
+      <div class="frow-head">
+        <h3 class="frow-name"><a href="${facilityHref(f)}" data-facility="${esc(f.id)}">${esc(f.name)}</a></h3>
+        <div class="frow-marks">
+          <span class="tag tag-blue">${esc(type)}</span>
+          ${f.inDhaMasterList
+            ? `<span class="verified">${ICON.shield}Verified</span>`
+            : '<span class="tag tag-amber">Unlisted</span>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="frow-specs">
+      ${top.length
+        ? `<span class="frow-specs-label">Most practised</span>
+           <span class="frow-specs-list" title="${esc(top.map((s) => `${specialtyLabel(s.label)} (${num(s.count)})`).join(', '))}">${top
+             .map((s) => `<span class="tag">${esc(specialtyLabel(s.label))}</span>`).join('')}</span>`
+        : '<span class="frow-specs-none">No specialty recorded for its professionals</span>'}
+    </div>
+
+    <div class="frow-count">
+      <b>${num(shown)}</b>
+      <span>${shown === 1 ? 'professional' : 'professionals'}${partial ? ` of ${num(f.doctorCount)}` : ''}</span>
+    </div>
+
+    <div class="frow-actions">
+      <span class="frow-cta">View facility ${ICON.arrow}</span>
+      <button class="frow-filter" type="button" data-facility-filter="${esc(f.name)}"
+              aria-label="Show only professionals at ${esc(f.name)}">${ICON.people}<span>Show staff</span></button>
+    </div>
+  </article>`;
+}
+
 export function renderCards(items, view) {
   const grid = $('#cardGrid');
-  grid.classList.toggle('is-list', state.layout === 'list');
-  grid.innerHTML = view === 'doctors' ? items.map(doctorCard).join('') : items.map(facilityCard).join('');
+  const isList = state.layout === 'list';
+  grid.classList.toggle('is-list', isList);
+  // Facilities get a purpose-built row in list mode; professionals keep the
+  // card, which already reflows cleanly to a single column.
+  grid.classList.toggle('is-frows', isList && view === 'facilities');
+  const render = view === 'doctors' ? doctorCard : (isList ? facilityRow : facilityCard);
+  grid.innerHTML = items.map(render).join('');
 }
 
 /* ═══ active filter chips ═══════════════════════════════════ */
@@ -130,7 +190,7 @@ const CHIP_LABEL = {
   cat: 'Category', spec: 'Specialty', ftype: 'Facility type',
   fac: 'Facility', lang: 'Language', nat: 'Nationality', lic: 'Licence',
 };
-const CHIP_VALUE = { ftype: (v) => FACILITY_TYPE_LABEL[v] ?? v, lic: (v) => LICENCE_LABEL[v] ?? v, spec: specialtyLabel };
+const CHIP_VALUE = { ftype: (v) => facilityTypeLabel(v), lic: (v) => LICENCE_LABEL[v] ?? v, spec: specialtyLabel };
 
 export function renderChips() {
   const row = $('#chipRow');
@@ -244,7 +304,7 @@ export function renderHeroSelects() {
   };
   fill('#heroCategory', db.facets.category);
   fill('#heroSpecialty', db.facets.specialty.slice(0, 60), (x) => specialtyLabel(x.label));
-  fill('#heroFacilityType', db.facets.facilityType, (x) => FACILITY_TYPE_LABEL[x.label] ?? x.label);
+  fill('#heroFacilityType', db.facets.facilityType, (x) => facilityTypeLabel(x.label));
 }
 
 /* ═══ popular searches — the real top specialties ═══════════ */
@@ -266,7 +326,7 @@ export function renderNetwork() {
   // a hole in the final row.
   const last = types.length - 1;
   host.innerHTML = types.map((t, i) => {
-    const label = FACILITY_TYPE_LABEL[t.type] ?? t.type;
+    const label = facilityTypeLabel(t.type);
     const size = i === 0 ? ' etile-lead' : (i === 1 || i === last ? ' etile-wide' : '');
     return `<button class="etile${size}" type="button" data-ftype="${esc(t.type)}" aria-label="Filter by ${esc(label)}">
       <span class="etile-plane ${PLANES[i % PLANES.length]}" aria-hidden="true"></span>
@@ -287,7 +347,7 @@ export function renderFacilityFeature() {
   const host = $('#facilityFeature');
   const top = [...db.facilities].sort((a, b) => b.doctorCount - a.doctorCount).slice(0, 6);
   host.innerHTML = top.map((f, i) => {
-    const type = f.type ? (FACILITY_TYPE_LABEL[f.type] ?? f.type) : '';
+    const type = facilityTypeLabel(f.type);
     const specs = facilityTopSpecialties(f);
     return `<article class="fac-card" data-facility-open="${esc(f.id)}">
       <div class="fac-visual" aria-hidden="true">

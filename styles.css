@@ -686,6 +686,77 @@ a{color:inherit;text-decoration:none}
 .save-btn[aria-pressed="true"]{color:#B4761B;border-color:#EDDCBB;background:#FBF3E3}
 .save-btn svg{width:15px;height:15px}
 
+/* ── facility list rows ───────────────────────────────────────
+   The list view is its own layout, not the grid card turned sideways.
+   A four-track grid gives each fact a fixed column, so a hundred rows line
+   up on the same axes instead of each finding its own alignment:
+
+     identity (flexes)  |  specialties (flexes)  |  staffing  |  actions
+
+   `minmax(0,…)` on the flexible tracks is what stops a long facility name or
+   a long specialty from widening the row and breaking that alignment.
+   ---------------------------------------------------------- */
+.card-grid.is-frows{gap:8px}
+.frow{
+  position:relative;display:grid;align-items:center;gap:14px 22px;
+  grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) auto auto;
+  padding:14px 18px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-5);
+  transition:border-color .2s var(--ease),box-shadow .24s var(--ease);
+}
+.frow:hover{border-color:#CCDCEC;box-shadow:var(--sh-2)}
+.frow:focus-within{border-color:var(--blue-line);box-shadow:var(--ring)}
+
+.frow-ident{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.frow-glyph{
+  display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:var(--r-3);
+  background:linear-gradient(152deg,#F2F5F9,#E4EAF1);border:1px solid #D3DCE6;color:var(--ink-2);
+}
+.frow-glyph svg{width:19px;height:19px}
+.frow-head{min-width:0;display:flex;flex-direction:column;gap:6px}
+.frow-name{font-size:14.5px;font-weight:750;letter-spacing:-.026em;line-height:1.32}
+.frow-name a{
+  display:block;outline:none;color:var(--ink);
+  white-space:normal;overflow-wrap:anywhere;hyphens:auto;
+}
+.frow:hover .frow-name a{color:var(--blue-deep)}
+/* One stretched hit area for the row; the name stays the only tab stop. */
+.frow-name a::after{content:"";position:absolute;inset:0;border-radius:var(--r-5)}
+.frow-marks{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.frow-marks .verified{flex:none}
+
+.frow-specs{min-width:0;display:flex;flex-direction:column;gap:5px}
+.frow-specs-label{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted-3);
+}
+.frow-specs-list{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.frow-specs-list .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow-specs-none{font-size:12px;color:var(--muted-3);font-style:italic}
+
+.frow-count{
+  display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none;
+  padding-left:18px;border-left:1px solid var(--line-soft);
+}
+.frow-count b{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.frow-count span{font-size:11px;color:var(--muted-2);white-space:nowrap}
+
+.frow-actions{display:flex;align-items:center;gap:8px;flex:none}
+.frow-cta{
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  font-size:12.5px;font-weight:700;color:var(--blue);
+}
+.frow-cta svg{width:14px;height:14px;transition:transform .24s var(--ease)}
+.frow:hover .frow-cta svg{transform:translateX(4px)}
+.frow-filter{
+  position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  padding:6px 11px;font-size:12px;font-weight:650;
+  border:1px solid var(--line);border-radius:var(--r-3);background:var(--card);color:var(--ink-3);
+  cursor:pointer;transition:color .2s var(--ease),border-color .2s var(--ease),background .2s var(--ease);
+}
+.frow-filter svg{width:14px;height:14px}
+.frow-filter:hover{color:var(--blue);border-color:var(--blue-line);background:var(--blue-wash)}
+
 /* list layout — same card, rearranged */
 .is-list .card{flex-direction:row;align-items:center;gap:20px;padding:16px 20px;flex-wrap:wrap}
 .is-list .card-mark{margin-bottom:0;order:2;flex-direction:column;align-items:flex-end;min-height:0}
@@ -1055,6 +1126,9 @@ a.recchip:active{transform:translateY(0)}
   font-size:12px;color:var(--muted);
 }
 .rec-dot{color:var(--muted-3)}
+/* The graduation year of an education entry — the one figure that tells two
+   otherwise identical qualifications apart, so it reads as a figure. */
+.rec-year{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
 .rec-lic{color:var(--ink-3)}
 .rec-lic .mono{font-size:11.5px;color:var(--ink-2)}
 .recchip-value{overflow-wrap:anywhere;word-break:break-all}
@@ -1078,21 +1152,68 @@ a.recchip:active{transform:translateY(0)}
 .aside-card .btn{margin-top:15px;width:100%}
 .aside-note{font-size:12px;color:var(--muted-2);line-height:1.6;padding:0 2px}
 
-.people-head{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:16px}
+/* ── professionals at a facility ──────────────────────────────
+   A responsive grid of cards rather than a text list. Cards share a row
+   baseline (`align-items:stretch` on the grid) so a two-line name and a
+   one-line name still produce a level row, and every text field is allowed
+   to wrap — a 40-character specialty must push the card taller, never wider.
+   ---------------------------------------------------------- */
+.people-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+.people-title{min-width:0}
 .people-head h2{font-size:19px;letter-spacing:-.03em}
+.people-sub{margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5}
 .people-search{min-width:min(300px,100%);max-width:340px;flex:1}
-.person-list{display:flex;flex-direction:column;gap:1px}
-.person{display:flex;align-items:center;gap:13px;padding:11px 12px;border-radius:var(--r-4);transition:background .18s var(--ease)}
-.person:hover{background:var(--card)}
-.person-avatar{
-  display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:var(--r-3);
-  background:var(--blue-wash);border:1px solid var(--blue-line);color:var(--blue-deep);
-  font-size:11.5px;font-weight:750;
+
+.pcard-grid{
+  display:grid;gap:10px;align-items:stretch;
+  grid-template-columns:repeat(auto-fill,minmax(268px,1fr));
 }
-.person-main{display:flex;flex-direction:column;min-width:0;flex:1}
-.person-name{font-size:14px;font-weight:700;letter-spacing:-.02em;white-space:normal;overflow-wrap:anywhere;hyphens:auto}
-.person-name:hover{color:var(--blue-deep)}
-.person-role{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcard{
+  position:relative;display:flex;align-items:flex-start;gap:12px;min-width:0;
+  padding:13px 14px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-5);
+  transition:border-color .2s var(--ease),box-shadow .24s var(--ease),transform .2s var(--ease);
+}
+.pcard:hover{border-color:var(--blue-line);box-shadow:var(--sh-3);transform:translateY(-2px)}
+.pcard:focus-within{border-color:var(--blue-line);box-shadow:var(--ring)}
+.pcard-avatar{
+  display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:var(--r-3);
+  background:linear-gradient(152deg,#EFF7FE,#DCEDFB);border:1px solid var(--blue-line);
+  color:var(--blue-deep);font-size:12px;font-weight:750;letter-spacing:-.02em;
+}
+.pcard-body{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.pcard-name{
+  font-size:14px;font-weight:750;letter-spacing:-.022em;line-height:1.32;color:var(--ink);
+  white-space:normal;overflow-wrap:anywhere;hyphens:auto;outline:none;
+}
+/* The whole card is the hit area; the anchor stays the only focusable thing
+   in it, so keyboard order and copy-link behaviour are unaffected. */
+.pcard-name::after{content:"";position:absolute;inset:0;border-radius:var(--r-5)}
+.pcard:hover .pcard-name{color:var(--blue-deep)}
+.pcard-role{
+  font-size:12.5px;font-weight:600;color:var(--blue-deep);line-height:1.4;
+  overflow-wrap:anywhere;
+}
+.pcard-meta{
+  font-size:11.5px;color:var(--muted-2);line-height:1.45;
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;
+}
+/* The separator belongs to the fact that follows it, so it wraps WITH that
+   fact instead of being left hanging at the end of the previous line. */
+.pcard-meta > span + span::before{content:"·";margin-right:5px;color:var(--muted-3)}
+.pcard-tags{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.pcard-tags .tag{font-size:10px;padding:2px 7px}
+.pcard-go{
+  position:absolute;right:10px;bottom:9px;width:15px;height:15px;color:var(--muted-3);
+  opacity:0;transform:translateX(-4px);transition:opacity .2s var(--ease),transform .2s var(--ease);
+}
+.pcard-go svg{width:15px;height:15px}
+.pcard:hover .pcard-go{opacity:1;transform:none;color:var(--blue)}
+.pcard-none{
+  grid-column:1/-1;padding:18px 14px;text-align:center;
+  font-size:13px;color:var(--muted);
+  border:1px dashed var(--line);border-radius:var(--r-5);
+}
 .detail-more{margin-top:14px;font-size:12.5px;color:var(--muted)}
 
 /* ═══ COOKIE CONSENT ═══════════════════════════════════════ */
@@ -1125,6 +1246,10 @@ a.recchip:active{transform:translateY(0)}
 @media (max-width:1180px){
   .workspace{grid-template-columns:250px minmax(0,1fr)}
   .card-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+  /* Tablet: the specialty preview drops under the identity rather than
+     competing with it for a narrower track. Nothing is hidden. */
+  .frow{grid-template-columns:minmax(0,1fr) auto auto}
+  .frow-specs{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap}
   .skeleton-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
   .editorial{grid-template-columns:repeat(3,1fr)}
   .etile-lead{grid-column:span 3;grid-row:auto;min-height:260px}
@@ -1194,6 +1319,7 @@ a.recchip:active{transform:translateY(0)}
   .detail-hero{grid-template-columns:minmax(0,1fr)}
   .detail-actions{flex-direction:row;flex-wrap:wrap}
   .is-list .card-meta{width:100%;order:5}
+  .pcard-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 }
 
 @media (max-width:768px){
@@ -1218,6 +1344,17 @@ a.recchip:active{transform:translateY(0)}
 
 @media (max-width:640px){
   .card-grid,.skeleton-grid{grid-template-columns:minmax(0,1fr)}
+  /* Phone: one column, everything stacked and left-aligned. The staffing
+     figure loses its rule and sits inline with the actions. */
+  .frow{grid-template-columns:minmax(0,1fr);gap:12px;padding:14px}
+  .frow-specs{grid-column:auto}
+  .frow-count{
+    flex-direction:row;align-items:baseline;gap:6px;
+    padding-left:0;border-left:0;
+  }
+  .frow-count b{font-size:15px}
+  .frow-actions{justify-content:space-between}
+  .pcard-grid{grid-template-columns:minmax(0,1fr)}
   .searchbar-row{grid-template-columns:minmax(0,1fr)}
   .searchbar{border-radius:var(--r-7)}
   .hero-proof{gap:8px 18px;font-size:12px}

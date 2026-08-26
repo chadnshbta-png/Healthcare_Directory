@@ -65,11 +65,17 @@ export async function loadProfile(id) {
   return bucket?.[id] ?? null;
 }
 
+/*
+ * Every accessor below returns the WHOLE published list. None of them slices,
+ * de-duplicates, or reaches for [0]: a professional with five qualifications
+ * has five education entries here, and the renderer shows five.
+ */
+
 /** Work history entries, current placements first, then most recent. */
 export const profileWork = (p) => (p && Array.isArray(p.w) ? p.w : []);
 /** Live licences as the register lists them (role, facility, number, status). */
 export const profileLicences = (p) => (p && Array.isArray(p.l) ? p.l : []);
-/** Education entries. */
+/** Education entries — all of them, in published order. */
 export const profileEducation = (p) => (p && Array.isArray(p.e) ? p.e : []);
 
 /**
@@ -83,6 +89,18 @@ export function profileContact(p) {
   if (c.p) out.push({ kind: 'phone', label: 'Phone number', value: c.p, href: `tel:${c.p.replace(/[^\d+]/g, '')}` });
   if (c.p2) out.push({ kind: 'phone', label: 'Second phone', value: c.p2, href: `tel:${c.p2.replace(/[^\d+]/g, '')}` });
   if (c.m) out.push({ kind: 'email', label: 'Email', value: c.m, href: `mailto:${c.m}` });
+  // A profile can publish TWO addresses (Personal and Work). Both are shown —
+  // an earlier export carried only the first and the second was lost entirely.
+  if (c.m2) out.push({ kind: 'email', label: 'Second email', value: c.m2, href: `mailto:${c.m2}` });
   if (c.i) out.push({ kind: 'linkedin', label: 'LinkedIn', value: c.i, href: c.i });
+  if (c.t) {
+    const handle = String(c.t).replace(/^@/, '');
+    out.push({
+      kind: 'twitter',
+      label: 'X (Twitter)',
+      value: c.t,
+      href: /^https?:/i.test(c.t) ? c.t : `https://x.com/${encodeURIComponent(handle)}`,
+    });
+  }
   return out;
 }

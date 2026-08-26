@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T18:00:27.378Z",
+  "generatedAt": "2026-08-26T11:06:16.553Z",
   "dataDir": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\Healthcare_Directory\\data.staging",
   "dbPath": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\backend\\prisma\\dev.db",
   "ok": true,
@@ -112,6 +112,56 @@
       "detail": "4357 rows still from the primary scalar vs 104539 from a filter pass — professionals the latest passes did not return"
     },
     {
+      "name": "every facility carries a classified type",
+      "level": "PASS",
+      "detail": "0 of 5652 have no type"
+    },
+    {
+      "name": "no facility falls back to the unclassified bucket",
+      "level": "PASS",
+      "detail": "0 classified as \"other\""
+    },
+    {
+      "name": "classification is not merely the DHA guess",
+      "level": "PASS",
+      "detail": "83 of 5652 fell through to the DHA keyword read"
+    },
+    {
+      "name": "facility-type facet is derived at load time",
+      "level": "NOTE",
+      "detail": "23 distinct types across facilities with professionals"
+    },
+    {
+      "name": "facility types in the export",
+      "level": "NOTE",
+      "detail": "pharmacy=1639 · medical_center=600 · clinic=516 · dental=439 · optical=434 · education=395 · polyclinic=325 · aesthetic=260 · home_healthcare=189 · hospital=168 · center=137 · alternative=115 · physiotherapy=111 · mental_health=54 · wellness=50 · laboratory=47 · nursing=44 · day_surgery=38 · diagnostic_center=30 · fitness=30 · maternity=11 · medical_supplier=11 · occupational=9"
+    },
+    {
+      "name": "facility type source",
+      "level": "NOTE",
+      "detail": "name=5373 · staff=196 · dha_type=83"
+    },
+    {
+      "name": "every education record is exported",
+      "level": "PASS",
+      "detail": "export 185061 vs source 185061"
+    },
+    {
+      "name": "every professional with education has a profile record",
+      "level": "PASS",
+      "detail": "export 93807 vs source 93807"
+    },
+    {
+      "name": "every work-history record is exported",
+      "level": "PASS",
+      "detail": "export 338735 vs source 338735"
+    },
+    {
+      "name": "repeated sections exported",
+      "level": "NOTE",
+      "detail": "education 185061 entries across 93807 professionals · work 338735 across 102418"
+    },
+    {
       "name": "professionals with no current facility",
       "level": "NOTE",
       "detail": "30413 in the export / 30413 in the source — facility name absent or unresolvable"
@@ -122,9 +172,9 @@
       "detail": "export 30413 vs db 30413"
     },
     {
-      "name": "profiles still holding a collapsed facility list",
+      "name": "collapsed lists not yet expanded",
       "level": "NOTE",
-      "detail": "12417 — run scripts/backfill-collapsed-facilities.mjs"
+      "detail": "63 of 12417 profiles have no expanded relationships — run scripts/backfill-collapsed-facilities.mjs"
     },
     {
       "name": "relationship rows by kind",

@@ -189,11 +189,13 @@ lists with global counts (live counts are recomputed client-side per query).
 
 ### `facilities.json`
 ```jsonc
-{ "version": 1,
+{ "version": 2,
+  "facilityTypeLabels": { "hospital": "Hospital", "medical_center": "Medical centre", ... },
   "facilities": [
     { "id": "cme...", "slug": "rashid-hospital-dubai-health",
-      "name": "Rashid Hospital - Dubai Health", "type": "hospital",
-      "doctorCount": 2656, "inDhaMasterList": true,
+      "name": "Rashid Hospital - Dubai Health",
+      "type": "hospital", "typeSource": "name", "dhaType": "hospital",
+      "doctorCount": 3249, "inDhaMasterList": true,
       "sourceUrl": "https://services.dha.gov.ae/..." }
   ] }
 ```
@@ -203,10 +205,39 @@ lists with global counts (live counts are recomputed client-side per query).
 | `id` | string | stable facility identifier — use for `/facility/<id>` |
 | `slug` | string | URL-friendly, unique (suffixed on collision) |
 | `name` | string | trimmed display name |
-| `type` | string\|null | `hospital`,`clinic`,`pharmacy`,`dental`,`laboratory`,`optical`,`polyclinic`,`medical_center`,`center` — **inferred from the name, not published by DHA** |
+| `type` | string | classified type — **always present**, see below |
+| `typeSource` | string | `name` \| `dha_type` \| `staff` — which evidence answered |
+| `dhaType` | string\|null | `Facility.typeGuess` as stored, carried for audit only |
 | `doctorCount` | int | current professionals linked to this facility |
 | `inDhaMasterList` | bool | present in the DHA facility list |
 | `sourceUrl` | string\|null | deep link to the DHA directory |
+
+#### Facility type
+
+DHA publishes **no** facility-type field, and `Facility.typeGuess` is null for
+964 of the 5,652 rows. Those used to surface in the UI as "Type not published",
+which is a non-answer wearing a category's clothes.
+
+`tools/facility-type.mjs` classifies every facility instead, from three sources
+in descending order of authority, and records which one answered:
+
+1. **`name`** — the registered name, normalised (case- and punctuation-
+   insensitive; `center`/`centre` unified; `L.L.C`, `LLC`, `FZ-LLC`, `(Branch)`,
+   `BR` and other company/branch words removed) and matched against ordered
+   rules, most specific first. *Diagnostic Center* → `diagnostic_center`, not
+   `center`; *Prime Medical Center L L C* → `medical_center`.
+2. **`dha_type`** — `typeGuess` mapped onto this vocabulary. Corroboration only:
+   it is the narrower ruleset and it is what produced the gap.
+3. **`staff`** — the registered specialties of the professionals DHA itself
+   linked to the facility, when a discipline dominates it. A place staffed
+   entirely by pharmacists is a pharmacy whatever its trading name says.
+
+The vocabulary travels **with the data** (`facilityTypeLabels`, in both this
+file and `meta.json`) so the UI can never drift from the classifier. `meta.json`
+also carries `facilityTypeCounts`, `facilityTypeSources` and
+`exclusions.facilitiesWithNoType`, which `tools/reconcile.mjs` asserts is 0.
+
+Current split: `name` 5,373 · `staff` 196 · `dha_type` 83 · unclassified 0.
 
 Array order matches `dict.facility` for the first 5,652 entries, so
 `facilityIdx` resolves directly. Indices **beyond** that are facility names
@@ -249,7 +280,7 @@ Six facets, all combinable, all ANDed across facets and ORed within a facet:
 | Language | `languages` | 74 | searchable list |
 | Nationality | `nationality` | 167 | searchable list |
 | Licence type | `licenseType` | 4 (FTL/PTL/REG/TRL) | chips |
-| Facility type | `facilityType` | hospital · clinic · pharmacy · medical centre · dental · optical · laboratory · other | chips |
+| Facility type | `facilityType` | 23 classified types (hospital · medical centre · clinic · pharmacy · dental centre · optical centre · polyclinic · diagnostic centre · laboratory · day surgery centre · home healthcare · nursing & care · physiotherapy & rehabilitation · mental health · maternity & fertility · aesthetic & skin · traditional & complementary · wellness · fitness & sports · school & nursery · occupational health · medical supplies · centre) | chips |
 | Profile data | `flags` + row shape | has facility · has contact details · has languages · has education | switches |
 
 Each option shows a **live count** recomputed against all *other* active filters,
@@ -342,10 +373,34 @@ changes the hash.
 
 Fields absent from the data are simply not rendered — no empty rows.
 
-**Not bundled:** contact values, work-history text and education text. The
-dataset records *whether* DHA publishes them (as flags, which power the filters
-and the "Records held by DHA" row) but not the values themselves. The detail
-view says so plainly and links to the DHA profile for the rest.
+**Not in `doctors.json`:** contact values, work-history text and education text.
+That file records *whether* DHA publishes them (as flags, which power the
+filters and the "Records held by DHA" row); the values live in the sharded
+`data/profiles/<NNN>.json` files and are fetched only when a detail page is
+opened. Where the profile export is not deployed, the detail view says so
+plainly and links to the DHA profile for the rest.
+
+#### Repeated profile sections
+
+Education, work history, licences, specialties, languages and contact channels
+are **lists**, and every stage of the pipeline treats them as lists. Nothing
+de-duplicates, slices or reaches for `[0]`:
+
+* `tools/parse-profile.mjs` returns every entry the register published, in
+  published order. It used to drop education lines that repeated verbatim — the
+  register emits a qualification once per licence it supports, and identical
+  text cannot tell one degree recorded twice from two equivalent degrees, so the
+  parser reports what is there and leaves the judgement to the reader.
+* `tools/export-profiles.mjs` writes every entry, with every field it could
+  identify: `q` qualification · `i` institution · `h` unlabelled heading ·
+  `g` graduated · `l` location · `y` country · `v` verification note ·
+  `o` any remaining part. Contact adds `m2` (second email) and `t` (Twitter),
+  both previously stranded in `Doctor.extraFields`.
+* `js/profile.js` returns the whole array; `js/detail.js` maps all of it.
+* `tools/reconcile.mjs` compares the exported entry totals against the
+  register's own — currently 185,061 education entries across 93,807
+  professionals, and 338,735 work entries — so a collapse anywhere in the chain
+  fails the publish rather than shipping quietly.
 
 ## 11b. Initialisation lifecycle (and why it is explicit)
 

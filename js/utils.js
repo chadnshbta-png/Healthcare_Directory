@@ -43,22 +43,64 @@ export const debounce = (fn, wait = 160) => {
   };
 };
 
-/** Readable label for a facility typeGuess. */
+/**
+ * Readable label for a classified facility type.
+ *
+ * The keys are produced by tools/facility-type.mjs and stored on every facility
+ * record, so a card, a facet, a chip, a query parameter and a detail page all
+ * name the same thing. This map is the FALLBACK: the dataset ships its own
+ * `facilityTypeLabels`, installed by `setFacilityTypeLabels()` as soon as the
+ * data lands, so a vocabulary added by a later export reads correctly without
+ * a matching change here.
+ *
+ * There is deliberately no "Type not published" entry. Every facility in the
+ * register is classified — from its name, from DHA's own keyword read, or from
+ * the specialties of the professionals linked to it — so the absence of a type
+ * is a bug to fix in the exporter, not a bucket to show a visitor.
+ */
 export const FACILITY_TYPE_LABEL = {
   hospital: 'Hospital',
+  day_surgery: 'Day surgery centre',
   polyclinic: 'Polyclinic',
-  clinic: 'Clinic',
   medical_center: 'Medical centre',
-  center: 'Centre',
-  pharmacy: 'Pharmacy',
-  dental: 'Dental',
+  clinic: 'Clinic',
+  diagnostic_center: 'Diagnostic centre',
   laboratory: 'Laboratory',
-  optical: 'Optical',
-  // The register publishes NO facility type field — see the note on the
-  // Facility type filter. This bucket is every facility whose name carried
-  // no recognisable keyword, which is a gap in the source, not a category.
-  other: 'Type not published',
+  pharmacy: 'Pharmacy',
+  dental: 'Dental centre',
+  optical: 'Optical centre',
+  physiotherapy: 'Physiotherapy & rehabilitation',
+  home_healthcare: 'Home healthcare',
+  nursing: 'Nursing & care',
+  mental_health: 'Mental health & behavioural',
+  maternity: 'Maternity & fertility',
+  aesthetic: 'Aesthetic & skin centre',
+  alternative: 'Traditional & complementary medicine',
+  wellness: 'Wellness centre',
+  veterinary: 'Veterinary',
+  education: 'School & nursery',
+  fitness: 'Fitness & sports',
+  occupational: 'Occupational & corporate health',
+  medical_supplier: 'Medical supplies & equipment',
+  center: 'Centre',
+  other: 'Other healthcare provider',
 };
+
+/**
+ * Install the vocabulary the loaded dataset shipped with. Called once, by the
+ * data layer, before anything renders — so the UI can never disagree with the
+ * classifier that produced the values it is showing.
+ */
+export function setFacilityTypeLabels(labels) {
+  if (!labels || typeof labels !== 'object') return;
+  for (const [key, label] of Object.entries(labels)) {
+    if (typeof label === 'string' && label) FACILITY_TYPE_LABEL[key] = label;
+  }
+}
+
+/** Label for one facility type key. Never returns an empty string. */
+export const facilityTypeLabel = (key) =>
+  (key && (FACILITY_TYPE_LABEL[key] ?? key)) || FACILITY_TYPE_LABEL.other;
 
 /**
  * Display-only gloss for specialties the public knows by a plainer name.

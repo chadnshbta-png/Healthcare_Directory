@@ -196,6 +196,91 @@ if (meta.licenceTypeSource && meta.licenceTypeSource !== 'doctor_licence_type') 
     `meta.licenceTypeSource="${meta.licenceTypeSource}"`);
 }
 
+// ── facility type: every facility is classified ─────────────────────────────
+// DHA publishes no facility type, so the directory derives one. The contract is
+// that EVERY facility gets an answer: a record with no type reaches the UI as a
+// non-category ("Type not published"), which is a defect, not a value.
+{
+  const list = facilities.facilities ?? [];
+  const untyped = list.filter((f) => !f.type);
+  const unclassified = list.filter((f) => f.type === 'other');
+  const bySource = new Map();
+  const byType = new Map();
+  for (const f of list) {
+    bySource.set(f.typeSource ?? 'none', (bySource.get(f.typeSource ?? 'none') ?? 0) + 1);
+    byType.set(f.type ?? 'none', (byType.get(f.type ?? 'none') ?? 0) + 1);
+  }
+
+  check('every facility carries a classified type', untyped.length === 0,
+    `${untyped.length} of ${list.length} have no type${untyped.length ? ` — e.g. ${untyped.slice(0, 3).map((f) => f.name).join(' | ')}` : ''}`);
+  check('no facility falls back to the unclassified bucket', unclassified.length === 0,
+    `${unclassified.length} classified as "other"${unclassified.length ? ` — e.g. ${unclassified.slice(0, 3).map((f) => f.name).join(' | ')}` : ''}`);
+
+  // The classification must not be DHA's guess wearing a new label: the name
+  // rules and the staff inference have to be doing the work.
+  const fromDha = bySource.get('dha_type') ?? 0;
+  check('classification is not merely the DHA guess', fromDha < list.length,
+    `${fromDha} of ${list.length} fell through to the DHA keyword read`);
+
+  // Every type present on a facility must be a type the facet can offer, or a
+  // filter could never reach those facilities.
+  const facetTypes = new Set((facets.facets?.facilityType ?? []).map((x) => x.label));
+  const withDoctors = new Set(list.filter((f) => f.doctorCount > 0).map((f) => f.type));
+  const missing = [...withDoctors].filter((t) => facetTypes.size > 0 && !facetTypes.has(t));
+  if (facetTypes.size === 0) {
+    // facets.facilityType is derived in the browser from facilities.json, so an
+    // export that does not precompute it is expected, not broken.
+    note('facility-type facet is derived at load time',
+      `${withDoctors.size} distinct types across facilities with professionals`);
+  } else {
+    check('every staffed facility type is offered by the facet', missing.length === 0,
+      missing.join(', ') || 'all present');
+  }
+
+  note('facility types in the export',
+    [...byType].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}=${n}`).join(' · '));
+  note('facility type source',
+    [...bySource].sort((a, b) => b[1] - a[1]).map(([s, n]) => `${s}=${n}`).join(' · '));
+}
+
+// ── repeated profile sections survive the export ────────────────────────────
+// The profile export is optional, so its absence is a NOTE. When it IS present
+// its entry counts are compared against the register's own, which is what
+// proves no repeated section was de-duplicated or collapsed on the way out.
+{
+  const indexPath = resolve(dataDir, 'profiles', 'index.json');
+  if (!existsSync(indexPath)) {
+    note('profile shards not in this dataset', 'education and work history are reported by flag only');
+  } else {
+    const pindex = JSON.parse(readFileSync(indexPath, 'utf8'));
+
+    /** Entries the register published, counted straight off the source text. */
+    const countEntries = (column) => {
+      let docs = 0;
+      let entries = 0;
+      for (const r of db.prepare(`select ${column} v from Doctor where ${column} is not null and ${column} != ''`).iterate()) {
+        docs++;
+        for (const part of String(r.v).split(' | ')) if (part.trim()) entries++;
+      }
+      return { docs, entries };
+    };
+    const srcEdu = countEntries('education');
+    const srcWork = countEntries('experience');
+
+    check('every education record is exported',
+      pindex.entries?.education === srcEdu.entries,
+      `export ${pindex.entries?.education ?? 'absent'} vs source ${srcEdu.entries}`);
+    check('every professional with education has a profile record',
+      pindex.counts?.withEducation === srcEdu.docs,
+      `export ${pindex.counts?.withEducation ?? 'absent'} vs source ${srcEdu.docs}`);
+    check('every work-history record is exported',
+      pindex.entries?.work === srcWork.entries,
+      `export ${pindex.entries?.work ?? 'absent'} vs source ${srcWork.entries}`);
+    note('repeated sections exported',
+      `education ${srcEdu.entries} entries across ${srcEdu.docs} professionals · work ${srcWork.entries} across ${srcWork.docs}`);
+  }
+}
+
 // ── measured exclusions ─────────────────────────────────────────────────────
 note('professionals with no current facility',
   `${doctorsWithNoFacility} in the export / ${src.doctorsWithNoCurrentRel} in the source — facility name absent or unresolvable`);

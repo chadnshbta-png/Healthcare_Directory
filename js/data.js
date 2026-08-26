@@ -4,7 +4,7 @@
  * Swap `loadDirectory()` for API calls and nothing else in the app changes.
  * See README.md ▸ "Replacing local data with an API" for the expected shapes.
  */
-import { fold } from './utils.js';
+import { fold, setFacilityTypeLabels } from './utils.js';
 
 /**
  * Data directory, resolved against THIS MODULE's location rather than the
@@ -181,6 +181,9 @@ export async function loadDirectory(onStage = () => {}) {
   const meta = await fetchJson('meta.json', null, 'no-cache');
   db.meta = meta;
   dataVersion = String(meta.generatedAt ?? meta.version ?? '');
+  // The dataset names its own facility types. Installed before anything renders
+  // so the UI reads the classifier's vocabulary rather than a stale copy of it.
+  setFacilityTypeLabels(meta.facilityTypeLabels);
 
   const facets = await fetchJson('facets.json');
   db.dict = facets.dict;
@@ -193,6 +196,9 @@ export async function loadDirectory(onStage = () => {}) {
   ]);
 
   db.facilities = facilities.facilities;
+  // facilities.json v2 ships the vocabulary too, so a directory served with an
+  // older meta.json still names its types correctly.
+  setFacilityTypeLabels(facilities.facilityTypeLabels);
   db.rows = doctors.rows;
 
   // Precompute the search haystack once (name only; other fields resolve via dictionaries).

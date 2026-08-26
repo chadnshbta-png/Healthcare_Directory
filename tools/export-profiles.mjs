@@ -25,11 +25,20 @@
  *
  * Record shape (keys kept short — this is the bulk of the payload):
  *   w  work history   [{ t title, f facility, x unlabelled place, n licence,
- *                      s start, e end, d duration, l location, c isCurrent }]
+ *                      s start, e end, d duration, l location, o other parts,
+ *                      c isCurrent }]
  *   l  live licences  [{ t title, f facility, n licence, s status }]
- *   e  education      [{ i institution, g graduated, l location }]
- *   c  contact        { p phone, p2 second phone, m email, i linkedIn }
+ *   e  education      [{ q qualification, i institution, h unlabelled heading,
+ *                      g graduated, l location, y country, v verification note,
+ *                      o other parts }]
+ *   c  contact        { p phone, p2 second phone, m email, m2 second email,
+ *                      i linkedIn, t twitter }
  * Absent fields are omitted, never emitted as null or "".
+ *
+ * EVERY entry of a repeated section is written. Nothing is de-duplicated,
+ * truncated or collapsed: if the register publishes a qualification twice,
+ * this file carries it twice, because the flattened source cannot tell a
+ * duplicated record from two equivalent ones and the exporter must not decide.
  */
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, writeFileSync, rmSync, statSync, readdirSync } from 'node:fs';
@@ -105,9 +114,22 @@ const put = (obj, key, value) => { if (value !== undefined) obj[key] = value; };
 const shards = new Map();
 let doctors = 0, withWork = 0, withEdu = 0, withContact = 0, withLicence = 0;
 
+/** Non-empty strings only, de-duplicated, order preserved. */
+const putList = (obj, key, values) => {
+  const out = [];
+  for (const v of values ?? []) {
+    const t = trim(v);
+    if (t !== undefined && !out.includes(t)) out.push(t);
+  }
+  if (out.length) obj[key] = out;
+};
+
+let eduEntries = 0;
+let workEntries = 0;
+
 for (const d of db.prepare(`
   select id, dhaUniqueId, experience, education,
-         mobileNumber, mobileNumber2, personalEmail, linkedIn
+         mobileNumber, mobileNumber2, personalEmail, linkedIn, extraFields
   from Doctor`).iterate()) {
   const rec = {};
 
@@ -121,30 +143,53 @@ for (const d of db.prepare(`
     put(row, 'e', trim(e.endDate));
     put(row, 'd', trim(e.duration));
     put(row, 'l', trim(e.location));
+    putList(row, 'o', e.extra);
     if (e.isCurrent) row.c = 1;
     return row;
   }).filter((row) => Object.keys(row).length > 0);
-  if (work.length) { rec.w = work; withWork++; }
+  if (work.length) { rec.w = work; withWork++; workEntries += work.length; }
 
   const licences = licencesByDoctor.get(d.id) ?? [];
   if (licences.length) { rec.l = licences; withLicence++; }
 
+  // EVERY education entry, in published order. No `seen` set, no `[0]`, no
+  // `find()` — a professional with five qualifications exports five rows.
   const edu = parseEducation(d.education).map((e) => {
     const row = {};
+    put(row, 'q', trim(e.qualification));
     put(row, 'i', trim(e.institution));
+    put(row, 'h', trim(e.heading));     // unlabelled leading value
     put(row, 'g', trim(e.graduated));
     put(row, 'l', trim(e.location));
+    put(row, 'y', trim(e.country));
+    put(row, 'v', trim(e.verification));
+    putList(row, 'o', e.extra);
     return row;
   }).filter((row) => Object.keys(row).length > 0);
-  if (edu.length) { rec.e = edu; withEdu++; }
+  if (edu.length) { rec.e = edu; withEdu++; eduEntries += edu.length; }
 
   // Published contact, verbatim. Only what the register actually carries — a
   // missing channel is an absent key, never a placeholder.
+  //
+  // `extraFields` holds every contact label DHA renders that has no promoted
+  // column of its own — a SECOND email for 3,125 professionals and a Twitter
+  // handle for 188. Those were published and this export used to drop them.
+  let extra = {};
+  try { extra = JSON.parse(d.extraFields || '{}') || {}; } catch { extra = {}; }
+
   const contact = {};
   put(contact, 'p', trim(d.mobileNumber));
-  put(contact, 'p2', trim(d.mobileNumber2));
+  // The office number lands in `mobileNumber2` when the profile publishes two,
+  // and in extraFields when the promotion did not run for that record.
+  put(contact, 'p2', trim(d.mobileNumber2) ?? trim(extra.contact_details_office_number));
   put(contact, 'm', trim(d.personalEmail));
+  // The second address, whichever key the enrichment recorded it under.
+  const secondEmail = trim(extra.secondary_email) ?? trim(extra.contact_details_work_email);
+  if (secondEmail && secondEmail.toLowerCase() !== String(contact.m ?? '').toLowerCase()) {
+    contact.m2 = secondEmail;
+  }
   put(contact, 'i', trim(d.linkedIn));
+  put(contact, 't', trim(extra.twitter) ?? trim(extra.contact_details_twitter));
   if (Object.keys(contact).length) { rec.c = contact; withContact++; }
 
   if (Object.keys(rec).length === 0) continue;
@@ -169,6 +214,12 @@ const index = {
   shards: shards.size,
   profiles: doctors,
   counts: { withWork, withLicence, withEducation: withEdu, withContact },
+  /**
+   * Total RECORDS, not professionals. `educationEntries` is the number the
+   * reconciler compares against the register's own entry count, which is what
+   * proves no repeated section was collapsed on the way out.
+   */
+  entries: { work: workEntries, education: eduEntries },
 };
 writeFileSync(resolve(outDir, 'index.json'), JSON.stringify(index));
 
@@ -179,6 +230,7 @@ console.log(`  profiles        ${doctors.toLocaleString()}`);
 console.log(`  shards          ${shards.size}`);
 console.log(`  with work       ${withWork.toLocaleString()}`);
 console.log(`  with licences   ${withLicence.toLocaleString()}`);
-console.log(`  with education  ${withEdu.toLocaleString()}`);
+console.log(`  with education  ${withEdu.toLocaleString()}  (${eduEntries.toLocaleString()} entries)`);
+console.log(`  work entries    ${workEntries.toLocaleString()}`);
 console.log(`  with contact    ${withContact.toLocaleString()}`);
 console.log(`  total size      ${(bytes / 1048576).toFixed(1)} MB  (avg ${(bytes / shards.size / 1024).toFixed(0)} KB per shard)`);

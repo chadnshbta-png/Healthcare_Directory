@@ -11,7 +11,9 @@ import {
   facilityTopSpecialties,
   doctorSourceUrl, facilityHref, doctorHref,
 } from './data.js';
-import { esc, num, initials, FACILITY_TYPE_LABEL, LICENCE_LABEL, specialtyLabel } from './utils.js';
+import {
+  esc, num, initials, facilityTypeLabel, LICENCE_LABEL, licenceBadge, specialtyLabel,
+} from './utils.js';
 import { loadProfile, profileWork, profileLicences, profileEducation, profileContact } from './profile.js';
 
 let host = null;
@@ -30,6 +32,8 @@ const ICON = {
   phone: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.4 3.5H4.2c-.7 0-1.3.6-1.2 1.3.5 6 4.9 10.4 10.9 10.9.7.1 1.3-.5 1.3-1.2v-2.2c0-.6-.4-1.1-1-1.2l-2-.4c-.5-.1-1 .1-1.2.5l-.6 1a10 10 0 0 1-4-4l1-.6c.4-.2.6-.7.5-1.2l-.4-2c-.1-.6-.6-1-1.2-1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
   mail: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.8" y="4.6" width="14.4" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m3.4 6 6.6 4.6L16.6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   linkedin: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.6 8.6V14M6.6 6.2v.1M9.8 14V8.6M9.8 11c0-1.4.9-2.4 2-2.4s1.9 1 1.9 2.4V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  twitter: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h3l4.2 5.6L15.6 4H17l-5.1 6.2L17.2 16h-3l-4.4-5.9L5.2 16H4l5.4-6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  pin: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17.5S4.8 12.7 4.8 9a5.2 5.2 0 1 1 10.4 0c0 3.7-5.2 8.5-5.2 8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="8.9" r="1.8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
 };
 
 export function initDetail(container, closeHandler) {
@@ -107,6 +111,9 @@ const workEntry = (w) => {
   if (w.n) meta.push(`<span class="rec-lic">Licence <span class="mono">${esc(w.n)}</span></span>`);
   if (w.s) meta.push(`<span>${esc(w.s)}${w.e ? ` — ${esc(w.e)}` : ''}${w.d ? ` <span class="dim">(${esc(w.d)})</span>` : ''}</span>`);
   if (w.l) meta.push(`<span>${esc(w.l)}</span>`);
+  // Values the register added that have no named slot. Kept visible rather
+  // than silently dropped between the parser and the page.
+  for (const x of w.o ?? []) meta.push(`<span>${esc(x)}</span>`);
   // `x` is a trailing value the register did not label as either a facility or
   // a city, so it is shown plainly rather than captioned as a workplace.
   const where = w.f
@@ -132,13 +139,37 @@ const licenceEntry = (l) => `<li class="rec-entry is-current">
   ${l.n ? `<p class="rec-meta"><span class="rec-lic">Licence <span class="mono">${esc(l.n)}</span></span></p>` : ''}
 </li>`;
 
-/** One education entry. */
+/**
+ * One education entry, rendered from EVERY field the register published for it.
+ *
+ * Shard keys: q qualification · i institution · h unlabelled heading ·
+ * g graduated · l location · y country · v verification note · o other parts.
+ *
+ * The headline is whichever of institution / qualification / heading the
+ * register actually gave, in that order — and when both a place and a
+ * qualification exist, both are shown. An entry is never reduced to one field,
+ * and a list of entries is never reduced to one entry.
+ */
 const eduEntry = (e) => {
+  const headline = e.i || e.q || e.h || '';
+  // Whatever did not become the headline still belongs on the card.
+  const secondary = [];
+  if (e.i && e.q) secondary.push(e.q);
+  if (e.i && e.h && e.h !== e.q) secondary.push(e.h);
+  if (!e.i && e.q && e.h && e.h !== e.q) secondary.push(e.h);
+  for (const x of e.o ?? []) secondary.push(x);
+
   const meta = [];
-  if (e.g) meta.push(`<span>Graduated ${esc(e.g)}</span>`);
-  if (e.l) meta.push(`<span>${esc(e.l)}</span>`);
+  if (e.g) meta.push(`<span class="rec-year">Graduated ${esc(e.g)}</span>`);
+  const place = [e.l, e.y].filter(Boolean).join(', ');
+  if (place) meta.push(`<span>${esc(place)}</span>`);
+  if (e.v) meta.push(`<span class="dim">${esc(e.v)}</span>`);
+
   return `<li class="rec-entry">
-    <div class="rec-entry-head"><p class="rec-role">${esc(e.i || 'Institution not published')}</p></div>
+    <div class="rec-entry-head">
+      <p class="rec-role">${esc(headline || 'Institution not published')}</p>
+    </div>
+    ${secondary.length ? `<p class="rec-where">${esc(secondary.join(' · '))}</p>` : ''}
     ${meta.length ? `<p class="rec-meta">${meta.join('<span class="rec-dot" aria-hidden="true">·</span>')}</p>` : ''}
   </li>`;
 };
@@ -186,7 +217,10 @@ function recordsBody(profile, flags) {
 
   if (edu.length) {
     records.push({
-      icon: ICON.study, label: 'Education',
+      // Open by default: the count in the summary and the list beneath it must
+      // agree on sight. Every entry the register published is in this list —
+      // the renderer maps the whole array and never slices it.
+      icon: ICON.study, label: 'Education', open: true,
       note: plural(edu.length, 'entry', 'entries'),
       body: `<ul class="rec-list">${edu.map(eduEntry).join('')}</ul>`,
     });
@@ -199,10 +233,12 @@ function recordsBody(profile, flags) {
     });
   }
 
-  const ICON_FOR = { phone: ICON.phone, email: ICON.mail, linkedin: ICON.linkedin };
+  const ICON_FOR = {
+    phone: ICON.phone, email: ICON.mail, linkedin: ICON.linkedin, twitter: ICON.twitter,
+  };
   let contactRows = contact.map((c) => ({
     icon: ICON_FOR[c.kind], label: c.label, value: c.value,
-    href: c.href, external: c.kind === 'linkedin',
+    href: c.href, external: c.kind === 'linkedin' || c.kind === 'twitter',
   }));
 
   // Without the profile export the values are unavailable, but doctors.json
@@ -316,7 +352,7 @@ function doctorView(id) {
         ${block(facilities.length > 1 ? 'Facilities' : 'Facility', facilities.length
           ? `<dl class="factlist">
               ${facilities.map((f) => field(
-                f.record?.type ? (FACILITY_TYPE_LABEL[f.record.type] ?? f.record.type) : 'Facility',
+                f.record?.type ? facilityTypeLabel(f.record.type) : 'Facility',
                 (f.record
                   ? `<a class="link-brand" href="${facilityHref(f.record)}">${esc(f.name)}</a>`
                   : esc(f.name))
@@ -355,37 +391,94 @@ function doctorView(id) {
 }
 
 /* ═══ facility ══════════════════════════════════════════════ */
+/**
+ * One professional at a facility, as a card.
+ *
+ * Everything on it is a published field: the name, the registered specialty (or
+ * the professional category when the register gives no specialty), the licence
+ * types held, the languages spoken, and whether the person also practises
+ * elsewhere. Fields the register does not publish are simply not there — the
+ * card has no fixed slots to fill with placeholders.
+ *
+ * The whole card is the link. The name carries the href so it is a real,
+ * copyable, keyboard-reachable anchor; a stretched ::after over the card makes
+ * the rest of the surface clickable without nesting interactive elements.
+ */
+const personCard = (r) => {
+  const name = r[R.NAME];
+  const spec = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
+  const cat = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
+  const role = spec ? specialtyLabel(spec) : cat;
+  const licences = rowLicences(r);
+  const langs = rowLanguages(r);
+  const elsewhere = Math.max(0, rowFacilityIdxs(r).length - 1);
+
+  const meta = [];
+  if (spec && cat && cat !== spec) meta.push(esc(cat));
+  if (langs.length) {
+    meta.push(`${esc(langs.slice(0, 2).join(' · '))}${langs.length > 2 ? ` +${langs.length - 2}` : ''}`);
+  }
+  if (elsewhere) {
+    meta.push(`Also at ${elsewhere} other ${elsewhere === 1 ? 'facility' : 'facilities'}`);
+  }
+
+  return `<li class="pcard">
+    <span class="pcard-avatar" aria-hidden="true">${esc(initials(name))}</span>
+    <span class="pcard-body">
+      <a class="pcard-name" href="${doctorHref(r[R.ID])}">${esc(name)}</a>
+      ${role ? `<span class="pcard-role" title="${esc(role)}">${esc(role)}</span>` : ''}
+      ${meta.length
+        // Each fact is its own element and the separator is drawn by CSS on the
+        // item that FOLLOWS it, so a wrap can never strand a "·" at the end of
+        // a line the way a joined-in separator does.
+        ? `<span class="pcard-meta">${meta.map((m) => `<span>${m}</span>`).join('')}</span>`
+        : ''}
+    </span>
+    ${licences.length
+      ? `<span class="pcard-tags">${licences
+          .map((l) => `<span class="tag" title="${esc(LICENCE_LABEL[l] ?? l)}">${esc(licenceBadge(l))}</span>`)
+          .join('')}</span>`
+      : ''}
+    <span class="pcard-go" aria-hidden="true">${ICON.chevron}</span>
+  </li>`;
+};
+
+/** How many professionals one facility page lists before asking you to filter. */
+const PEOPLE_LIMIT = 60;
+
 function facilityPeopleRows(facilityId) {
   const fi = db.facilities.findIndex((f) => f.id === facilityId);
   if (fi < 0) return '';
   const q = facilityQuery;
   const out = [];
-  for (let i = 0; i < db.rows.length && out.length < 60; i++) {
+  for (let i = 0; i < db.rows.length && out.length < PEOPLE_LIMIT; i++) {
     const r = db.rows[i];
     if (!rowFacilityIdxs(r).includes(fi)) continue;
     if (q && !db.foldedName[i].includes(q)) continue;
-    const spec = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
-    const cat = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
-    out.push(`<li class="person">
-      <span class="person-avatar" aria-hidden="true">${esc(initials(r[R.NAME]))}</span>
-      <span class="person-main">
-        <a class="person-name" href="${doctorHref(r[R.ID])}">${esc(r[R.NAME])}</a>
-        <span class="person-role" title="${esc(spec ? specialtyLabel(spec) : cat)}">${esc(spec ? specialtyLabel(spec) : cat)}</span>
-      </span>
-    </li>`);
+    out.push(personCard(r));
   }
   return out.length
     ? out.join('')
-    : '<li class="opt-none">No professionals match that name at this facility.</li>';
+    : `<li class="pcard-none">No professionals match ${q ? 'that name' : 'this facility'} in the register.</li>`;
 }
 
 function facilityView(id) {
   const f = db.facilities.find((x) => x.id === id);
   if (!f) return notFound('Facility not found', `No facility with id ${esc(id)} exists in this dataset.`);
 
-  const type = f.type ? (FACILITY_TYPE_LABEL[f.type] ?? f.type) : '';
+  const type = facilityTypeLabel(f.type);
   const specs = facilityTopSpecialties(f);
   facilityQuery = '';
+
+  // Where the type came from, said plainly. The register publishes none, so the
+  // page names the evidence rather than implying an official field.
+  const TYPE_PROVENANCE = {
+    name: 'read from the registered facility name',
+    dha_type: "from the register's own keyword classification",
+    staff: 'inferred from the specialties of the professionals licensed here',
+    unclassified: 'no classifying evidence in the record',
+  };
+  const provenance = TYPE_PROVENANCE[f.typeSource] ?? TYPE_PROVENANCE.name;
 
   const sub = [];
   if (type) sub.push(`<b>${esc(type)}</b>`);
@@ -415,7 +508,7 @@ function facilityView(id) {
     <div class="detail-layout">
       <div>
         ${block('Facility information', `<dl class="factlist">
-          ${field('Facility type', type ? `${esc(type)} <span class="dim">(from the facility name)</span>` : '')}
+          ${field('Facility type', type ? `${esc(type)} <span class="dim">(${esc(provenance)})</span>` : '')}
           ${field('Professionals linked', num(f.doctorCount))}
           ${field('Register listing', f.inDhaMasterList ? 'Present on the official facility list' : 'Not present')}
           ${field('Facility ID', `<span class="mono">${esc(f.id)}</span>`)}
@@ -425,16 +518,19 @@ function facilityView(id) {
           ? `<div class="fac-specs" style="border:0;padding:0;margin:0">${specs.map((s) => `<span class="tag tag-brand">${esc(specialtyLabel(s.label))} <span class="mono">${num(s.count)}</span></span>`).join('')}</div>`
           : '')}
 
-        <section class="detail-block">
+        <section class="detail-block people-block">
           <div class="people-head">
-            <h2>Healthcare professionals at this facility</h2>
+            <div class="people-title">
+              <h2>Healthcare professionals at this facility</h2>
+              <p class="people-sub">${num(f.doctorCount)} licensed ${f.doctorCount === 1 ? 'professional is' : 'professionals are'} linked to this facility on the register.</p>
+            </div>
             <label class="opt-search people-search">
               ${ICON.search}
               <input type="search" data-facility-search="${esc(f.id)}" placeholder="Search within this facility…" aria-label="Search professionals at this facility">
             </label>
           </div>
-          <ul class="person-list" data-facility-people>${facilityPeopleRows(f.id)}</ul>
-          ${f.doctorCount > 60 ? `<p class="detail-more">Showing the first 60 of ${num(f.doctorCount)}. Use the search above, or filter by this facility in the directory.</p>` : ''}
+          <ul class="pcard-grid" data-facility-people>${facilityPeopleRows(f.id)}</ul>
+          ${f.doctorCount > PEOPLE_LIMIT ? `<p class="detail-more">Showing the first ${PEOPLE_LIMIT} of ${num(f.doctorCount)}. Use the search above, or filter by this facility in the directory.</p>` : ''}
         </section>
       </div>
 
@@ -444,7 +540,7 @@ function facilityView(id) {
           <p>Narrow the whole directory to the ${num(f.doctorCount)} professionals linked to this facility.</p>
           <button class="btn btn-primary" type="button" data-facility-filter="${esc(f.name)}">Show these professionals</button>
         </div>
-        <p class="aside-note">Facility type is derived from the registered facility name. Everything else on this page is a published field.</p>
+        <p class="aside-note">The register publishes no facility type, so this one is ${esc(provenance)}. Everything else on this page is a published field.</p>
       </aside>
     </div>
   </article>`;

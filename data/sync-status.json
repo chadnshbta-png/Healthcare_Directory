@@ -1,5 +1,5 @@
 {
-  "lastSuccessfulSyncAt": "2026-08-24T18:00:27.419Z",
+  "lastSuccessfulSyncAt": "2026-08-26T11:06:17.423Z",
   "schemaVersion": 3,
   "licenceTypeSource": "doctor_licence_type",
   "totals": {
@@ -11,16 +11,18 @@
     "categories": 5,
     "nationalities": 167,
     "languages": 74,
-    "doctorsWithContact": 22395
+    "doctorsWithContact": 22395,
+    "facilityTypes": 23
   },
   "exclusions": {
-    "doctorsWithNoFacility": 30413
+    "doctorsWithNoFacility": 30413,
+    "facilitiesWithNoType": 0
   },
   "relationships": null,
   "reconciliation": {
     "ok": true,
     "failures": 0,
-    "notes": 5
+    "notes": 9
   },
   "rollbackAvailable": true
 }

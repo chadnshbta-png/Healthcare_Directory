@@ -23,6 +23,8 @@ import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { classifyFacility, FACILITY_TYPES } from './facility-type.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, cur, i, arr) => {
@@ -91,7 +93,12 @@ const facilities = facilityRows.map((f, i) => {
     id: f.id,
     slug,
     name: f.nameTrimmed,
-    type: f.typeGuess ?? null,
+    // Filled in by the classification pass below, once the professionals
+    // linked to this facility are known. `typeGuess` is carried along as ONE
+    // of the three inputs, never as the answer.
+    type: null,
+    typeSource: null,
+    dhaType: f.typeGuess ?? null,
     doctorCount: f.doctorCount,
     inDhaMasterList: Boolean(f.isInDhaMasterList),
     sourceUrl: f.facilityTagUrl ?? null,
@@ -268,6 +275,50 @@ db.close();
   // Consumers that want "most staffed first" sort a copy at read time.
 }
 
+// ── facility type, classified ───────────────────────────────────────────────
+/**
+ * Every facility gets a type. `Facility.typeGuess` is null for a sixth of the
+ * register, which the directory used to publish as "Type not published" — a
+ * non-answer dressed up as a category.
+ *
+ * The type is derived instead by tools/facility-type.mjs from three inputs, in
+ * this order: the registered NAME (normalised, ordered rules, specific beats
+ * generic), then `typeGuess` as corroboration, then the SPECIALTIES of the
+ * professionals the register itself linked to the facility. `typeSource`
+ * records which of the three answered, so the detail page can say so rather
+ * than implying the register published it.
+ *
+ * The staff tally is built from the SAME exported rows the directory will show,
+ * so a classification can never rest on a relationship the export dropped.
+ */
+const facilityTypeStats = { byType: new Map(), bySource: new Map() };
+{
+  const staffByFacilityIdx = new Map();
+  for (const r of rows) {
+    const si = r[3];
+    if (si < 0) continue;
+    for (const fi of new Set(r[6])) {
+      let tally = staffByFacilityIdx.get(fi);
+      if (!tally) staffByFacilityIdx.set(fi, (tally = new Map()));
+      tally.set(si, (tally.get(si) ?? 0) + 1);
+    }
+  }
+
+  for (let i = 0; i < facilities.length; i++) {
+    const f = facilities[i];
+    const tally = staffByFacilityIdx.get(i);
+    const staff = tally
+      ? [...tally].map(([si, count]) => ({ label: dict.specialty[si] ?? '', count }))
+      : [];
+    const { type, source } = classifyFacility({ name: f.name, dhaType: f.dhaType, staff });
+    f.type = type;
+    f.typeSource = source;
+    facilityTypeStats.byType.set(type, (facilityTypeStats.byType.get(type) ?? 0) + 1);
+    facilityTypeStats.bySource.set(source, (facilityTypeStats.bySource.get(source) ?? 0) + 1);
+  }
+}
+const unclassifiedFacilities = facilityTypeStats.byType.get('other') ?? 0;
+
 // ── facet counts (so the filter UI can render before the big file lands) ────
 const countBy = (getter) => {
   const m = new Map();
@@ -315,7 +366,26 @@ const meta = {
     nationalities: facets.nationality.length,
     languages: facets.language.length,
     doctorsWithContact: withContact,
+    facilityTypes: facilityTypeStats.byType.size,
   },
+  /**
+   * The facility-type vocabulary, shipped WITH the data so the UI can never
+   * fall out of step with the classifier. A key the reader does not recognise
+   * still reads correctly because its label travels alongside it.
+   */
+  facilityTypeLabels: FACILITY_TYPES,
+  /**
+   * How the classification actually landed, per type and per source. Published
+   * so the split between "read from the name", "corroborated by DHA's guess"
+   * and "inferred from the linked professionals" is auditable rather than
+   * asserted. `unclassified` MUST be 0 — see the reconciler's check.
+   */
+  facilityTypeCounts: Object.fromEntries(
+    [...facilityTypeStats.byType].sort((a, b) => b[1] - a[1]),
+  ),
+  facilityTypeSources: Object.fromEntries(
+    [...facilityTypeStats.bySource].sort((a, b) => b[1] - a[1]),
+  ),
   /**
    * What the export deliberately leaves out, so an absence is measurable
    * rather than mysterious. Anything counted here is a known gap, not a bug.
@@ -327,6 +397,11 @@ const meta = {
      * row, and the export refuses to guess.
      */
     doctorsWithNoFacility,
+    /**
+     * Facilities the classifier could place in no type at all. Reported so a
+     * regression in the rules is a number rather than a surprise in the UI.
+     */
+    facilitiesWithNoType: unclassifiedFacilities,
   },
   flags: FLAG,
   rowSchema: ['id', 'name', 'categoryIdx', 'specialtyIdx', 'licenceTypeIdxs', 'nationalityIdx', 'facilityIdxs', 'languageIdxs', 'flags', 'pastFacilityIdxs'],
@@ -340,7 +415,7 @@ const write = (file, obj) => {
 
 write('meta.json', meta);
 write('facets.json', { version: 1, dict, facets });
-write('facilities.json', { version: 1, facilities });
+write('facilities.json', { version: 2, facilityTypeLabels: FACILITY_TYPES, facilities });
 write('doctors.json', { version: 3, count: rows.length, rows });
 
 console.log('\ndone.');
@@ -348,5 +423,10 @@ console.log(`  doctors    ${meta.totals.doctors.toLocaleString()}`);
 console.log(`  facilities ${meta.totals.facilities.toLocaleString()}`);
 console.log(`  licence types  ${facets.licenseType.map((x) => `${x.label}=${x.count}`).join(' · ')}`);
 console.log(`  licence source ${licenceTypeSource}`);
+console.log(`  facility types ${facilityTypeStats.byType.size} in use · unclassified ${unclassifiedFacilities}`);
+for (const [type, n] of [...facilityTypeStats.byType].sort((a, b) => b[1] - a[1])) {
+  console.log(`      ${String(n).padStart(5)}  ${(FACILITY_TYPES[type] ?? type).padEnd(38)} ${type}`);
+}
+console.log(`  type source    ${[...facilityTypeStats.bySource].sort((a, b) => b[1] - a[1]).map(([s, n]) => `${s}=${n}`).join(' · ')}`);
 console.log(`  no facility    ${doctorsWithNoFacility.toLocaleString()} professionals (excluded, see meta.exclusions)`);
 console.log(`  specialties ${meta.totals.specialties} · categories ${meta.totals.categories} · languages ${meta.totals.languages} · nationalities ${meta.totals.nationalities}`);

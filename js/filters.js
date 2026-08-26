@@ -5,7 +5,7 @@
  */
 import { db } from './data.js';
 import { state, MULTI, TOGGLES } from './state.js';
-import { $, esc, num, fold, LICENCE_LABEL, FACILITY_TYPE_LABEL, specialtyLabel } from './utils.js';
+import { $, esc, num, fold, LICENCE_LABEL, facilityTypeLabel, specialtyLabel } from './utils.js';
 import { facetCounts, toggleCounts } from './query.js';
 
 const CHECK = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2 6.2 2.6 2.6L10 3.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -21,10 +21,12 @@ const GROUPS = [
   { key: 'spec', stateKey: 'specialties', title: 'Specialty', dict: 'specialty', style: 'list', open: true, searchable: true, initial: 8, labelFn: specialtyLabel },
   {
     key: 'ftype', stateKey: 'facilityTypes', title: 'Facility type', dict: 'facilityType',
-    style: 'chips', open: true, labelMap: FACILITY_TYPE_LABEL,
+    style: 'chips', open: true, labelFn: facilityTypeLabel,
     // The one facet not taken from a published field. Saying so is the
     // difference between a filter and a claim.
-    note: 'The register publishes no facility type. These are read from the facility name.',
+    note: 'The register publishes no facility type. Each one is classified from the '
+      + 'registered facility name and, where the name says nothing, from the specialties '
+      + 'of the professionals licensed there.',
   },
   { key: 'fac', stateKey: 'facilities', title: 'Facility', dict: 'facility', style: 'list', open: true, searchable: true, initial: 6 },
   { key: 'lang', stateKey: 'languages', title: 'Language', dict: 'language', style: 'list', open: false, searchable: true, initial: 8 },

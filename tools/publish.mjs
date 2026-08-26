@@ -105,6 +105,13 @@ if (skipProfiles) {
   process.exit(1);
 }
 
+// The swap replaces the whole directory, so anything hand-written inside it is
+// lost unless it is carried over. data/README.md documents the files for anyone
+// who opens the folder directly and is not an exporter output.
+if (existsSync(resolve(LIVE, 'README.md'))) {
+  cpSync(resolve(LIVE, 'README.md'), resolve(STAGING, 'README.md'));
+}
+
 // ── 2. validate the staged dataset ──────────────────────────────────────────
 console.log('');
 log('2/4 validate');
