@@ -11,7 +11,7 @@ import {
   doctorHref, facilityHref,
 } from './data.js';
 import { state, MULTI, TOGGLES, activeFilterCount } from './state.js';
-import { $, esc, num, initials, facilityTypeLabel, LICENCE_LABEL, licenceBadge, specialtyLabel } from './utils.js';
+import { $, esc, num, initials, facilityTypeLabel, LICENCE_LABEL, specialtyLabel } from './utils.js';
 
 const ICON = {
   facility: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -40,7 +40,6 @@ function doctorCard(rowIdx) {
   const category = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
   const specialty = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
   const licences = rowLicences(r);
-  const licence = licences[0] ?? '';
   const nationality = r[R.NATIONALITY] >= 0 ? db.dict.nationality[r[R.NATIONALITY]] : '';
   const facility = rowFacility(r);
   const facilityName = facility ? facility.name : '';
@@ -62,12 +61,11 @@ function doctorCard(rowIdx) {
   if (langs.length) meta.push(`<div class="meta-row langs">${ICON.chat}<span>${esc(langs.slice(0, 3).join(' · '))}${langs.length > 3 ? ` +${langs.length - 3}` : ''}</span></div>`);
 
   const marks = [];
+  // The verification mark stays; the licence-type abbreviation does not. "REG"
+  // and "FTL" mean nothing to a visitor, and the full licence information is on
+  // the professional's detail page. The licence VALUES are untouched — the
+  // licence facet still filters on every type this professional holds.
   if (licences.length) marks.push(VERIFIED);
-  // EVERY licence type the professional holds gets a badge. A card must not
-  // imply someone is only Full-time when they are also Part-time elsewhere.
-  for (const l of licences) {
-    marks.push(`<span class="tag" title="${esc(LICENCE_LABEL[l] ?? l)}">${esc(licenceBadge(l))}</span>`);
-  }
   if (licences.length === 0 && (rowHas(r, FLAG.MOBILE) || rowHas(r, FLAG.EMAIL))) {
     marks.push('<span class="tag tag-brand">Contactable</span>');
   }
@@ -155,9 +153,11 @@ function facilityRow(f) {
 
     <div class="frow-specs">
       ${top.length
+        // Same data, same treatment as the grid card's meta row: one scannable
+        // line rather than a stack of tags, which is what kept list rows tall.
         ? `<span class="frow-specs-label">Most practised</span>
-           <span class="frow-specs-list" title="${esc(top.map((s) => `${specialtyLabel(s.label)} (${num(s.count)})`).join(', '))}">${top
-             .map((s) => `<span class="tag">${esc(specialtyLabel(s.label))}</span>`).join('')}</span>`
+           <span class="frow-specs-list" title="${esc(top.map((s) => `${specialtyLabel(s.label)} (${num(s.count)})`).join(', '))}">${esc(top
+             .map((s) => specialtyLabel(s.label)).join(' · '))}</span>`
         : '<span class="frow-specs-none">No specialty recorded for its professionals</span>'}
     </div>
 

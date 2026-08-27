@@ -12,7 +12,7 @@ import {
   doctorSourceUrl, facilityHref, doctorHref,
 } from './data.js';
 import {
-  esc, num, initials, facilityTypeLabel, LICENCE_LABEL, licenceBadge, specialtyLabel,
+  esc, num, initials, facilityTypeLabel, LICENCE_LABEL, specialtyLabel,
 } from './utils.js';
 import { loadProfile, profileWork, profileLicences, profileEducation, profileContact } from './profile.js';
 
@@ -313,9 +313,9 @@ function doctorView(id) {
     : '';
 
   const sub = [];
-  if (specialty) sub.push(`<b>${esc(specialtyLabel(specialty))}</b>`);
-  if (category && category !== specialty) sub.push(esc(category));
+  if (category && category !== specialty) sub.push(`<b>${esc(category)}</b>`);
   if (facilityName) sub.push(esc(facilityName));
+  if (facilities.length > 1) sub.push(`+${facilities.length - 1} more ${facilities.length === 2 ? 'facility' : 'facilities'}`);
 
   return `
   <article class="detail" role="dialog" aria-modal="true" aria-label="${esc(name)}">
@@ -325,7 +325,10 @@ function doctorView(id) {
       <div class="detail-ident">
         <div class="avatar detail-avatar" aria-hidden="true">${esc(initials(name))}</div>
         <div class="detail-headline">
-          ${licence ? `<span class="verified verified-solid">${ICON.shield}Verified</span>` : ''}
+          <div class="detail-badges">
+            ${licence ? `<span class="verified verified-solid">${ICON.shield}Verified</span>` : ''}
+            ${specialty ? `<span class="tag tag-blue">${esc(specialtyLabel(specialty))}</span>` : ''}
+          </div>
           <h1 class="detail-name">${esc(name)}</h1>
           <p class="detail-sub">${sub.join('<span class="detail-dot" aria-hidden="true"></span>')}</p>
         </div>
@@ -364,7 +367,10 @@ function doctorView(id) {
         ${block('Licensing information', licence
           ? `<dl class="factlist">
               ${field(licences.length > 1 ? 'Licence types' : 'Licence type',
-                licences.map((l) => `<span class="tag tag-brand">${esc(LICENCE_LABEL[l] ?? l)} <span class="mono dim">(${esc(l)})</span></span>`).join(' '))}
+                // The readable label only. The register's own value is still what
+                // the licence facet filters on; repeating it here said the same
+                // thing twice ("Registered only (Registered Only)").
+                licences.map((l) => `<span class="tag tag-brand">${esc(LICENCE_LABEL[l] ?? l)}</span>`).join(' '))}
             </dl>`
           : '')}
 
@@ -409,7 +415,6 @@ const personCard = (r) => {
   const spec = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
   const cat = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
   const role = spec ? specialtyLabel(spec) : cat;
-  const licences = rowLicences(r);
   const langs = rowLanguages(r);
   const elsewhere = Math.max(0, rowFacilityIdxs(r).length - 1);
 
@@ -434,11 +439,6 @@ const personCard = (r) => {
         ? `<span class="pcard-meta">${meta.map((m) => `<span>${m}</span>`).join('')}</span>`
         : ''}
     </span>
-    ${licences.length
-      ? `<span class="pcard-tags">${licences
-          .map((l) => `<span class="tag" title="${esc(LICENCE_LABEL[l] ?? l)}">${esc(licenceBadge(l))}</span>`)
-          .join('')}</span>`
-      : ''}
     <span class="pcard-go" aria-hidden="true">${ICON.chevron}</span>
   </li>`;
 };
@@ -478,11 +478,18 @@ function facilityView(id) {
     staff: 'inferred from the specialties of the professionals licensed here',
     unclassified: 'no classifying evidence in the record',
   };
+  /** The compact form, for the fact cell, which is one column wide. */
+  const TYPE_PROVENANCE_SHORT = {
+    name: 'From the facility name',
+    dha_type: 'From the register’s keyword read',
+    staff: 'From the linked professionals',
+    unclassified: 'No classifying evidence',
+  };
   const provenance = TYPE_PROVENANCE[f.typeSource] ?? TYPE_PROVENANCE.name;
+  const provenanceShort = TYPE_PROVENANCE_SHORT[f.typeSource] ?? TYPE_PROVENANCE_SHORT.name;
 
   const sub = [];
-  if (type) sub.push(`<b>${esc(type)}</b>`);
-  sub.push(`${num(f.doctorCount)} linked ${f.doctorCount === 1 ? 'professional' : 'professionals'}`);
+  sub.push(`<b>${num(f.doctorCount)}</b> linked ${f.doctorCount === 1 ? 'professional' : 'professionals'}`);
 
   return `
   <article class="detail" role="dialog" aria-modal="true" aria-label="${esc(f.name)}">
@@ -492,9 +499,12 @@ function facilityView(id) {
       <div class="detail-ident">
         <div class="avatar facility detail-avatar" aria-hidden="true">${ICON.facility}</div>
         <div class="detail-headline">
-          ${f.inDhaMasterList
-            ? `<span class="verified verified-solid">${ICON.shield}Verified</span>`
-            : '<span class="tag tag-amber">Not on the official facility list</span>'}
+          <div class="detail-badges">
+            ${f.inDhaMasterList
+              ? `<span class="verified verified-solid">${ICON.shield}Verified</span>`
+              : '<span class="tag tag-amber">Not on the official facility list</span>'}
+            ${type ? `<span class="tag tag-blue">${esc(type)}</span>` : ''}
+          </div>
           <h1 class="detail-name">${esc(f.name)}</h1>
           <p class="detail-sub">${sub.join('<span class="detail-dot" aria-hidden="true"></span>')}</p>
         </div>
@@ -508,9 +518,8 @@ function facilityView(id) {
     <div class="detail-layout">
       <div>
         ${block('Facility information', `<dl class="factlist">
-          ${field('Facility type', type ? `${esc(type)} <span class="dim">(${esc(provenance)})</span>` : '')}
+          ${field('Facility type', type ? `${esc(type)}<span class="dt-note">${esc(provenanceShort)}</span>` : '')}
           ${field('Professionals linked', num(f.doctorCount))}
-          ${field('Register listing', f.inDhaMasterList ? 'Present on the official facility list' : 'Not present')}
           ${field('Facility ID', `<span class="mono">${esc(f.id)}</span>`)}
         </dl>`)}
 

@@ -6,7 +6,7 @@
  */
 import {
   db, R, FLAG, rowFacilityIdxs, rowFacilityCount, forEachFacilityIdx, rowHasFacilityIn,
-  rowLicenceIdxs,
+  rowLicenceIdxs, facilityTypeKey,
 } from './data.js';
 import { state, MULTI } from './state.js';
 import { fold } from './utils.js';
@@ -311,6 +311,26 @@ export function facilityResults(matchedRowIdx) {
       const f = db.facilityByDictIdx.get(fi);
       if (f) list.push({ ...f, matchingDoctors: n });
     }
+  }
+
+  /**
+   * Facility-type filtering, resolved against the FACILITY'S OWN stored type.
+   *
+   * The list above is built from the matching PROFESSIONALS, so it contains
+   * every facility each of them is linked to. A professional licensed at both
+   * a medical centre and a hospital therefore dragged that hospital into a
+   * "Medical centre" result — the relationship is real, but the facility is
+   * not a medical centre and listing it as one was misleading.
+   *
+   * In the default 'type' mode a facility survives only when its own classified
+   * `type` is one of the selected values. 'linked' keeps the broad behaviour for
+   * anyone who deliberately wants every placement of the matching professionals.
+   *
+   * Nothing is deleted: the doctor-facility links, the counts and the stored
+   * types are untouched. This decides which of them the Facilities view shows.
+   */
+  if (state.facilityTypes.size && state.facilityMatch === 'type') {
+    list = list.filter((f) => state.facilityTypes.has(facilityTypeKey(f)));
   }
 
   // A facility name search should still work when no professional matched.

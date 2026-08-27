@@ -4,7 +4,7 @@
  * supports are rendered, and every count comes from a real query pass.
  */
 import { db } from './data.js';
-import { state, MULTI, TOGGLES } from './state.js';
+import { state, MULTI, TOGGLES, FACILITY_MATCH } from './state.js';
 import { $, esc, num, fold, LICENCE_LABEL, facilityTypeLabel, specialtyLabel } from './utils.js';
 import { facetCounts, toggleCounts } from './query.js';
 
@@ -61,6 +61,7 @@ function groupShell(g) {
     ${head(g.key, g.title, g.open)}
     <div class="fgroup-body" id="fgroup-${g.key}">
       ${g.note ? `<p class="fgroup-note">${esc(g.note)}</p>` : ''}
+      ${g.key === 'ftype' ? matchModeShell() : ''}
       ${g.searchable ? `<div class="fgroup-tools">
         <label class="opt-search">${SEARCH_ICO}
           <input type="search" data-optsearch="${g.key}" placeholder="Search ${esc(g.title.toLowerCase())}…" aria-label="Search ${esc(g.title)} options">
@@ -72,6 +73,30 @@ function groupShell(g) {
       <div data-options="${g.key}"></div>
     </div>
   </section>`;
+}
+
+/**
+ * How a selected facility type resolves to FACILITY results.
+ *
+ * A professional may hold placements at facilities of several types, so a
+ * facility list built from matching professionals can contain a hospital under
+ * a "Medical centre" filter. That is real data, but it is not what most people
+ * mean, so the choice is made explicit here rather than left to be guessed.
+ *
+ * The switch only changes which facilities are listed — the doctor results, the
+ * facet counts and the underlying relationships are identical either way.
+ */
+function matchModeShell() {
+  const opt = (value, label, hint) => `
+    <button class="matchmode-opt" type="button" role="radio" data-matchmode="${value}"
+            aria-checked="${state.facilityMatch === value}">
+      <span class="matchmode-label">${esc(label)}</span>
+      <span class="matchmode-hint">${esc(hint)}</span>
+    </button>`;
+  return `<div class="matchmode" role="radiogroup" aria-label="How a facility type filters results">
+    ${opt('type', FACILITY_MATCH.type, 'Facilities of that type only')}
+    ${opt('linked', FACILITY_MATCH.linked, "Every facility the matching professionals work at")}
+  </div>`;
 }
 
 function flagsShell() {
@@ -174,6 +199,10 @@ export function refreshFilters(matches) {
     setBadge(g.key, selected.size);
   }
 
+  for (const btn of document.querySelectorAll('[data-matchmode]')) {
+    btn.setAttribute('aria-checked', String(btn.dataset.matchmode === state.facilityMatch));
+  }
+
   // Profile-data switches, with live counts from the current result set.
   const tCounts = matches ? toggleCounts(matches) : null;
   for (const k of Object.keys(TOGGLES)) {
@@ -226,6 +255,17 @@ function handleClick(e) {
     const m = ui.get(more.dataset.more);
     m.expanded = !m.expanded;
     onChange({ refreshOnly: true });
+    return;
+  }
+
+  const mode = e.target.closest('[data-matchmode]');
+  if (mode) {
+    const value = mode.dataset.matchmode;
+    if (value !== state.facilityMatch) {
+      state.facilityMatch = value;
+      state.page = 1;
+      onChange();
+    }
     return;
   }
 

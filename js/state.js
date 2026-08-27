@@ -30,9 +30,28 @@ export const TOGGLES = {
   education: 'Has education',
 };
 
+/**
+  * How a selected FACILITY TYPE resolves to facility results.
+  *
+  *   'type'   the facility's own classified type must match the selection.
+  *            Medical centre -> medical centres only. A professional who also
+  *            works at a hospital does not pull that hospital into the result.
+  *   'linked' every facility reachable through a matching professional, so a
+  *            multi-facility professional surfaces all of their placements.
+  *
+  * Doctor results are identical under both modes — a professional licensed at a
+  * medical centre matches "Medical centre" either way. The mode decides which
+  * FACILITIES are listed, which is the thing that was ambiguous.
+  */
+export const FACILITY_MATCH = {
+  type: 'Match selected facility type',
+  linked: 'All linked facilities',
+};
+
 export const state = {
   view: 'doctors',
   q: '',
+  facilityMatch: 'type',
   categories: new Set(),
   specialties: new Set(),
   facilities: new Set(),
@@ -88,6 +107,8 @@ export function readUrl() {
   if (sort) state.sort = sort;
   const layout = p.get('layout');
   if (layout === 'list' || layout === 'grid') state.layout = layout;
+  const ftmode = p.get('ftmode');
+  state.facilityMatch = ftmode in FACILITY_MATCH ? ftmode : 'type';
   const page = Number(p.get('page'));
   state.page = Number.isFinite(page) && page > 0 ? page : 1;
 }
@@ -102,6 +123,8 @@ export function writeUrl() {
   if (state.toggles.size) p.set('has', [...state.toggles].join(','));
   if (state.sort !== 'relevance') p.set('sort', state.sort);
   if (state.layout !== 'grid') p.set('layout', state.layout);
+  // Only the non-default mode travels in the URL, so existing links keep working.
+  if (state.facilityMatch !== 'type') p.set('ftmode', state.facilityMatch);
   if (state.page > 1) p.set('page', String(state.page));
   const qs = p.toString();
   // Keep the hash. It carries the detail route (#/doctor/<id>), and dropping it
