@@ -112,22 +112,44 @@
 
     <!-- unified search system -->
     <form class="searchbar" id="heroSearchForm" role="search">
+      <div class="smode" role="radiogroup" aria-label="What to search">
+        <button class="smode-opt is-active" type="button" role="radio" aria-checked="true" data-smode="all">All</button>
+        <button class="smode-opt" type="button" role="radio" aria-checked="false" data-smode="facilities">Facilities</button>
+        <button class="smode-opt" type="button" role="radio" aria-checked="false" data-smode="professionals">Professionals</button>
+      </div>
+
       <label class="sfield sfield-main">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span class="sr-only">Search the directory</span>
         <input id="heroSearch" type="search" autocomplete="off" spellcheck="false"
                placeholder="Search doctors, specialists, clinics or hospitals…"
-               aria-label="Search doctors, specialties, facilities or licence number">
+               aria-label="Search doctors, specialties, facilities or licence number"
+               role="combobox" aria-expanded="false" aria-controls="acList" aria-autocomplete="list">
         <button class="sfield-clear" type="button" id="heroSearchClear" hidden aria-label="Clear search">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
+        <ul class="ac-list" id="acList" role="listbox" aria-label="Search suggestions" hidden></ul>
       </label>
 
-      <div class="searchbar-row">
+      <!-- ALL: the search box answers across every domain, so a filter here
+           would have to mean something different in each of them. Nothing but
+           the action. -->
+      <div class="searchbar-row searchbar-row-solo" data-sfilters="all">
+        <div class="searchbar-submit">
+          <button class="btn btn-primary" type="submit">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            Search
+          </button>
+        </div>
+      </div>
+
+      <!-- FACILITIES: facility-side filters only. Area and Add-Ons are absent
+           because no field in the dataset backs them — see the note below. -->
+      <div class="searchbar-row" data-sfilters="facilities" hidden>
         <label class="sfield">
           <span class="sfield-body">
             <span class="sfield-label">Category</span>
-            <select id="heroCategory" aria-label="Filter by professional category">
+            <select id="facCategory" aria-label="Filter by facility category">
               <option value="">Any category</option>
             </select>
           </span>
@@ -136,19 +158,9 @@
 
         <label class="sfield">
           <span class="sfield-body">
-            <span class="sfield-label">Specialty</span>
-            <select id="heroSpecialty" aria-label="Filter by specialty">
-              <option value="">Any specialty</option>
-            </select>
-          </span>
-          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </label>
-
-        <label class="sfield">
-          <span class="sfield-body">
-            <span class="sfield-label">Facility</span>
-            <select id="heroFacilityType" aria-label="Filter by facility type">
-              <option value="">Any facility</option>
+            <span class="sfield-label">Specialities</span>
+            <select id="facSpecialities" aria-label="Filter by service practised at the facility">
+              <option value="">Any speciality</option>
             </select>
           </span>
           <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -160,6 +172,89 @@
             Search
           </button>
         </div>
+      </div>
+
+      <!-- PROFESSIONALS: the four primary filters, then a disclosure. -->
+      <div class="searchbar-row searchbar-row-pro" data-sfilters="professionals" hidden>
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Licence Type</span>
+            <select id="proLicence" aria-label="Filter by licence type">
+              <option value="">Any licence</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Category</span>
+            <select id="proCategory" aria-label="Filter by professional category">
+              <option value="">Any category</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Specialty</span>
+            <select id="proSpecialty" aria-label="Filter by specialty">
+              <option value="">Any specialty</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+      </div>
+
+      <!-- The disclosure sits on its own line UNDER the primary filters, so
+           the advanced grid opens beneath it rather than beside them. Search
+           keeps the same row, right-aligned, and is reachable in every state. -->
+      <div class="searchbar-actions" data-sfilters="professionals" hidden>
+        <button class="sadv-toggle" type="button" id="topAdvanced"
+                aria-expanded="false" aria-controls="topAdvancedRow">
+          Advanced Filters
+          <span class="sadv-count" id="topAdvancedCount" hidden>0</span>
+          <svg class="sadv-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </button>
+        <button class="btn btn-primary searchbar-go" type="submit">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          Search
+        </button>
+      </div>
+
+      <!-- Revealed BELOW the disclosure, never replacing the primary row. -->
+      <div class="searchbar-row searchbar-row-adv" id="topAdvancedRow" data-sfilters="professionals-advanced" hidden>
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Language</span>
+            <select id="proLanguage" aria-label="Filter by language spoken">
+              <option value="">Any language</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Facility</span>
+            <select id="proFacility" aria-label="Filter by facility">
+              <option value="">Any facility</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
+
+        <label class="sfield">
+          <span class="sfield-body">
+            <span class="sfield-label">Nationality</span>
+            <select id="proNationality" aria-label="Filter by nationality">
+              <option value="">Any nationality</option>
+            </select>
+          </span>
+          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </label>
       </div>
     </form>
 

@@ -8,20 +8,28 @@
  */
 import {
   db, R, FLAG, rowFacility, rowFacilities, rowFacilityIdxs, rowLanguages, rowHas, rowLicences,
-  facilityTopSpecialties,
+  facilityTopSpecialties, rowRolesAt, rowHasRoleAt,
+  rowIsLicensedAt, facilityLicensedCount,
   doctorSourceUrl, facilityHref, doctorHref,
 } from './data.js';
 import {
   esc, num, initials, facilityTypeLabel, LICENCE_LABEL, specialtyLabel,
 } from './utils.js';
 import { loadProfile, profileWork, profileLicences, profileEducation, profileContact } from './profile.js';
+import { state } from './state.js';
 
 let host = null;
 let onClose = () => {};
+let onPageChange = () => {};
 let facilityQuery = '';
+// A facility lists exactly one population — the professionals the register
+// places there now (js/data.js ▸ rowIsLicensedAt). There is no scope switch:
+// offering "all linked" or "registered" as alternative staff lists is what
+// made the figures disagree with the register in the first place.
 
 const ICON = {
   back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H5m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  fwd: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   ext: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 4H4v12h12v-4M12 3h5v5M9.5 10.5 17 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   facility: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chevron: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 5 4 5-4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -36,9 +44,10 @@ const ICON = {
   pin: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17.5S4.8 12.7 4.8 9a5.2 5.2 0 1 1 10.4 0c0 3.7-5.2 8.5-5.2 8.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="8.9" r="1.8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
 };
 
-export function initDetail(container, closeHandler) {
+export function initDetail(container, closeHandler, pageChangeHandler = () => {}) {
   host = container;
   onClose = closeHandler;
+  onPageChange = pageChangeHandler;
   host.addEventListener('click', (e) => {
     const close = e.target.closest('[data-detail-close]');
     if (close) {
@@ -51,9 +60,69 @@ export function initDetail(container, closeHandler) {
     const box = e.target.closest('[data-facility-search]');
     if (!box) return;
     facilityQuery = box.value.toLowerCase();
-    const list = host.querySelector('[data-facility-people]');
-    if (list) list.innerHTML = facilityPeopleRows(box.dataset.facilitySearch);
+    // A new in-facility query is a new result set, so paging restarts at 1.
+    // The specialty chip stays selected: query AND specialty compose.
+    state.facilityPage = 1;
+    repaintPeople(box.dataset.facilitySearch);
   });
+
+  // Specialty chips: pick / unpick, and "Load more".
+  host.addEventListener('click', (e) => {
+    const more = e.target.closest('[data-spec-more]');
+    if (more) {
+      e.preventDefault();
+      specShown += SPEC_STEP;
+      repaintSpecialties();
+      return;
+    }
+    const chip = e.target.closest('[data-spec-pick]');
+    if (!chip) return;
+    e.preventDefault();
+    const label = chip.dataset.specPick;
+    // Clicking the selected chip clears the filter.
+    state.facilitySpecialty = state.facilitySpecialty === label ? '' : label;
+    // A different population means paging starts again.
+    state.facilityPage = 1;
+    onPageChange();
+    repaintSpecialties();
+    const list = host.querySelector('[data-facility-people]');
+    if (list?.dataset.facilityPeople) repaintPeople(list.dataset.facilityPeople);
+  });
+
+  // Pagination. The facility id travels on the list element, so the constraint
+  // cannot be lost between pages.
+  host.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-facility-page]');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    const page = Number(btn.dataset.facilityPage);
+    if (!Number.isFinite(page) || page < 1) return;
+    const list = host.querySelector('[data-facility-people]');
+    const id = list?.dataset.facilityPeople;
+    if (!id) return;
+    state.facilityPage = page;
+    onPageChange();
+    repaintPeople(id);
+    host.querySelector('.people-block')?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
+}
+
+/** Redraw the chip row in place, preserving scroll position. */
+function repaintSpecialties() {
+  const list = host.querySelector('[data-facility-people]');
+  const id = list?.dataset.facilityPeople;
+  if (!id) return;
+  const mount = host.querySelector('[data-spec-chips]')?.parentElement;
+  if (!mount) return;
+  mount.innerHTML = specialtyChips(facilityRegisteredSpecialties(id));
+}
+
+/** Redraw the current page of professionals and the pager beneath it. */
+function repaintPeople(facilityId) {
+  const list = host.querySelector('[data-facility-people]');
+  if (list) list.innerHTML = facilityPeopleRows(facilityId);
+  const pager = host.querySelector('[data-facility-pager]');
+  if (pager) pager.innerHTML = facilityPager(facilityId);
 }
 
 /** One fact; returns '' when there is no value, so nothing empty renders. */
@@ -410,11 +479,20 @@ function doctorView(id) {
  * copyable, keyboard-reachable anchor; a stretched ::after over the card makes
  * the rest of the surface clickable without nesting interactive elements.
  */
-const personCard = (r) => {
+const personCard = (r, facilityIdx = -1) => {
   const name = r[R.NAME];
-  const spec = r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '';
+  // On a facility page the card states the role the register licenses this
+  // person for HERE. Their other specialties are real but belong to their
+  // other facilities, and printing one of those on this card would attribute
+  // it to a facility the register never associated it with.
+  const roleIdxs = facilityIdx >= 0 ? rowRolesAt(r, facilityIdx) : [];
+  const spec = roleIdxs.length
+    ? roleIdxs.map((i) => db.dict.specialty[i]).filter(Boolean).join(' · ')
+    : (r[R.SPECIALTY] >= 0 ? db.dict.specialty[r[R.SPECIALTY]] : '');
   const cat = r[R.CATEGORY] >= 0 ? db.dict.category[r[R.CATEGORY]] : '';
-  const role = spec ? specialtyLabel(spec) : cat;
+  const role = spec
+    ? spec.split(' · ').map((s) => specialtyLabel(s)).join(' · ')
+    : cat;
   const langs = rowLanguages(r);
   const elsewhere = Math.max(0, rowFacilityIdxs(r).length - 1);
 
@@ -443,23 +521,177 @@ const personCard = (r) => {
   </li>`;
 };
 
-/** How many professionals one facility page lists before asking you to filter. */
-const PEOPLE_LIMIT = 60;
-
-function facilityPeopleRows(facilityId) {
+/**
+ * Every distinct specialty practised by the professionals REGISTERED at this
+ * facility — the same population the headline count describes, so the chips and
+ * the number can never describe different groups of people.
+ *
+ * No counts and no frequency ordering: this answers "what is practised here",
+ * not "what is practised most". Sorted alphabetically so the list is stable.
+ */
+function facilityRegisteredSpecialties(facilityId) {
   const fi = db.facilities.findIndex((f) => f.id === facilityId);
-  if (fi < 0) return '';
-  const q = facilityQuery;
-  const out = [];
-  for (let i = 0; i < db.rows.length && out.length < PEOPLE_LIMIT; i++) {
+  if (fi < 0) return [];
+  const seen = new Set();
+  for (let i = 0; i < db.rows.length; i++) {
     const r = db.rows[i];
-    if (!rowFacilityIdxs(r).includes(fi)) continue;
-    if (q && !db.foldedName[i].includes(q)) continue;
-    out.push(personCard(r));
+    // The chips describe the population currently listed below them, so they
+    // follow the scope. Otherwise switching to "All linked" would show people
+    // whose specialty has no chip, and a chip could describe nobody on screen.
+    // A facility's people are those the register places here NOW: an active
+    // licence covering this facility that the register also names directly.
+    // Not the all-linked union, not the primary registration, and not every
+    // facility a group licence happens to cover.
+    const inScope = rowIsLicensedAt(r, fi);
+    if (!inScope) continue;
+    // The role held AT THIS FACILITY, not the professional's own specialty:
+    // the register licenses per facility and prints a title on each licence.
+    for (const si of rowRolesAt(r, fi)) {
+      const label = db.dict.specialty[si];
+      if (label) seen.add(label);
+    }
   }
-  return out.length
-    ? out.join('')
-    : `<li class="pcard-none">No professionals match ${q ? 'that name' : 'this facility'} in the register.</li>`;
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/** Specialty chips revealed initially, and per "Load more" click. */
+const SPEC_FIRST = 5;
+const SPEC_STEP = 10;
+/** How many chips are currently revealed. Reset when a facility is opened. */
+let specShown = SPEC_FIRST;
+
+/**
+ * The specialty chips.
+ *
+ * Every chip is a real filter over this facility's people, not a decoration:
+ * clicking one narrows the list below to professionals who are BOTH in the
+ * current population (registered or all-linked) AND hold that specialty.
+ * Clicking the selected chip again clears it.
+ */
+function specialtyChips(labels) {
+  // The SELECTED specialty is always rendered, pinned first. Without this a
+  // choice that sits beyond the revealed window — restored from ?fspec= on
+  // load, or chosen then collapsed — would filter the list while being
+  // invisible and impossible to clear. Same convention the filter rail uses.
+  const picked = state.facilitySpecialty;
+  const rest = picked ? labels.filter((l) => l !== picked) : labels;
+  const ordered = picked && labels.includes(picked) ? [picked, ...rest] : labels;
+  const shown = ordered.slice(0, specShown);
+  const remaining = ordered.length - shown.length;
+  return `<div class="fac-specs fac-specs-all" data-spec-chips>
+      ${shown.map((label) => {
+        const on = state.facilitySpecialty === label;
+        return `<button class="tag tag-brand spec-chip${on ? ' is-on' : ''}" type="button"
+                data-spec-pick="${esc(label)}" aria-pressed="${on}">${esc(specialtyLabel(label))}</button>`;
+      }).join('')}
+    </div>
+    ${remaining > 0
+      // No button once everything is shown — not a disabled one.
+      ? `<button class="btn btn-outline btn-sm spec-more" type="button" data-spec-more>
+           Load more<span class="spec-more-n">${num(remaining)} left</span>
+         </button>`
+      : ''}`;
+}
+
+/** Professionals shown per page on a facility detail page. */
+const PEOPLE_PER_PAGE = 24;
+
+/**
+ * Every professional the register links to this facility, honouring the
+ * in-page search box. Returns row indices only — the page renders one slice.
+ *
+ * The facility constraint is applied here and nowhere else, so it can never be
+ * lost by paging or searching: both operate on this already-scoped list.
+ */
+function facilityPeopleIdx(facilityId) {
+  const fi = db.facilities.findIndex((f) => f.id === facilityId);
+  if (fi < 0) return { fi: -1, idx: [] };
+  const q = facilityQuery;
+  const idx = [];
+  for (let i = 0; i < db.rows.length; i++) {
+    const r = db.rows[i];
+    // 'registered' = the register's own primary facility for this person, which
+    // is the figure DHA publishes. 'linked' = every current relationship. Both
+    // are real; the scope decides which the list is showing, and the heading
+    // above it says which.
+    // A facility's people are those the register places here NOW: an active
+    // licence covering this facility that the register also names directly.
+    // Not the all-linked union, not the primary registration, and not every
+    // facility a group licence happens to cover.
+    const inScope = rowIsLicensedAt(r, fi);
+    if (!inScope) continue;
+    // The specialty chip is a real filter over the SAME scoped population, so
+    // facility + specialty + name search compose as an intersection.
+    // Matched against the role held AT THIS FACILITY. Filtering on the
+    // professional-level specialty would return someone licensed here under a
+    // different title purely because they hold that specialty somewhere else.
+    if (state.facilitySpecialty && !rowHasRoleAt(r, fi, state.facilitySpecialty)) continue;
+    if (q && !db.foldedName[i].includes(q)) continue;
+    idx.push(i);
+  }
+  return { fi, idx };
+}
+
+/** The current page's cards. Only this slice is ever rendered. */
+function facilityPeopleRows(facilityId) {
+  const { fi, idx } = facilityPeopleIdx(facilityId);
+  if (!idx.length) {
+    return `<li class="pcard-none">No professionals match ${facilityQuery ? 'that name' : 'this facility'} in the register.</li>`;
+  }
+  const pages = Math.max(1, Math.ceil(idx.length / PEOPLE_PER_PAGE));
+  const page = Math.min(Math.max(1, state.facilityPage), pages);
+  const start = (page - 1) * PEOPLE_PER_PAGE;
+  // A slice, never the whole set: 3,249 professionals must not become 3,249
+  // DOM nodes just to show 24 of them.
+  return idx.slice(start, start + PEOPLE_PER_PAGE).map((i) => personCard(db.rows[i], fi)).join('');
+}
+
+/**
+ * Page controls: Previous · 1 2 3 … N · Next.
+ *
+ * Window of pages around the current one so the control stays a fixed width
+ * whether the facility has 3 pages or 136.
+ */
+function facilityPager(facilityId) {
+  const { idx } = facilityPeopleIdx(facilityId);
+  const total = idx.length;
+  const pages = Math.max(1, Math.ceil(total / PEOPLE_PER_PAGE));
+  if (pages <= 1) {
+    return total
+      ? `<p class="pager-note">${num(total)} ${total === 1 ? 'professional' : 'professionals'}</p>`
+      : '';
+  }
+  const page = Math.min(Math.max(1, state.facilityPage), pages);
+  const from = (page - 1) * PEOPLE_PER_PAGE + 1;
+  const to = Math.min(page * PEOPLE_PER_PAGE, total);
+
+  const nums = [];
+  const push = (n) => nums.push(
+    `<button class="pager-num${n === page ? ' is-current' : ''}" type="button"
+             data-facility-page="${n}"${n === page ? ' aria-current="page"' : ''}
+             aria-label="Page ${n}">${n}</button>`);
+  const gap = () => nums.push('<span class="pager-gap" aria-hidden="true">…</span>');
+  const window = 1;
+  let last = 0;
+  for (let n = 1; n <= pages; n++) {
+    const near = Math.abs(n - page) <= window;
+    if (n === 1 || n === pages || near) {
+      if (last && n - last > 1) gap();
+      push(n);
+      last = n;
+    }
+  }
+
+  return `<nav class="pager" aria-label="Professional list pages">
+    <p class="pager-note">Showing <b>${num(from)}–${num(to)}</b> of <b>${num(total)}</b>${facilityQuery ? ' matching' : ''}</p>
+    <div class="pager-controls">
+      <button class="pager-step" type="button" data-facility-page="${page - 1}"
+              ${page === 1 ? 'disabled' : ''} aria-label="Previous page">${ICON.back} Previous</button>
+      <div class="pager-nums">${nums.join('')}</div>
+      <button class="pager-step" type="button" data-facility-page="${page + 1}"
+              ${page === pages ? 'disabled' : ''} aria-label="Next page">Next ${ICON.fwd}</button>
+    </div>
+  </nav>`;
 }
 
 function facilityView(id) {
@@ -468,7 +700,10 @@ function facilityView(id) {
 
   const type = facilityTypeLabel(f.type);
   const specs = facilityTopSpecialties(f);
+  const licensed = facilityLicensedCount(f);
+  const regSpecs = facilityRegisteredSpecialties(f.id);
   facilityQuery = '';
+  specShown = SPEC_FIRST;
 
   // Where the type came from, said plainly. The register publishes none, so the
   // page names the evidence rather than implying an official field.
@@ -489,7 +724,9 @@ function facilityView(id) {
   const provenanceShort = TYPE_PROVENANCE_SHORT[f.typeSource] ?? TYPE_PROVENANCE_SHORT.name;
 
   const sub = [];
-  sub.push(`<b>${num(f.doctorCount)}</b> linked ${f.doctorCount === 1 ? 'professional' : 'professionals'}`);
+  // The hero states the same figure the cards and the people list use: the
+  // facility's staff. A different number here would read as a contradiction.
+  sub.push(`<b>${num(licensed)}</b> licensed ${licensed === 1 ? 'professional' : 'professionals'}`);
 
   return `
   <article class="detail" role="dialog" aria-modal="true" aria-label="${esc(f.name)}">
@@ -519,34 +756,32 @@ function facilityView(id) {
       <div>
         ${block('Facility information', `<dl class="factlist">
           ${field('Facility type', type ? `${esc(type)}<span class="dt-note">${esc(provenanceShort)}</span>` : '')}
-          ${field('Professionals linked', num(f.doctorCount))}
+          ${field('Professionals working here', `${num(licensed)}<span class="dt-note">Currently licensed to practise at this facility</span>`)}
           ${field('Facility ID', `<span class="mono">${esc(f.id)}</span>`)}
         </dl>`)}
 
-        ${block('Most common specialties', specs.length
-          ? `<div class="fac-specs" style="border:0;padding:0;margin:0">${specs.map((s) => `<span class="tag tag-brand">${esc(specialtyLabel(s.label))} <span class="mono">${num(s.count)}</span></span>`).join('')}</div>`
-          : '')}
+        ${block('Specialties', regSpecs.length ? specialtyChips(regSpecs) : '')}
 
         <section class="detail-block people-block">
           <div class="people-head">
             <div class="people-title">
               <h2>Healthcare professionals at this facility</h2>
-              <p class="people-sub">${num(f.doctorCount)} licensed ${f.doctorCount === 1 ? 'professional is' : 'professionals are'} linked to this facility on the register.</p>
+              <p class="people-sub"><b>${num(licensed)}</b> currently ${licensed === 1 ? 'works' : 'work'} here, as the register states it</p>
             </div>
             <label class="opt-search people-search">
               ${ICON.search}
               <input type="search" data-facility-search="${esc(f.id)}" placeholder="Search within this facility…" aria-label="Search professionals at this facility">
             </label>
           </div>
-          <ul class="pcard-grid" data-facility-people>${facilityPeopleRows(f.id)}</ul>
-          ${f.doctorCount > PEOPLE_LIMIT ? `<p class="detail-more">Showing the first ${PEOPLE_LIMIT} of ${num(f.doctorCount)}. Use the search above, or filter by this facility in the directory.</p>` : ''}
+          <ul class="pcard-grid" data-facility-people="${esc(f.id)}">${facilityPeopleRows(f.id)}</ul>
+          <div data-facility-pager>${facilityPager(f.id)}</div>
         </section>
       </div>
 
       <aside class="detail-aside">
         <div class="aside-card">
           <h3>Filter the directory</h3>
-          <p>Narrow the whole directory to the ${num(f.doctorCount)} professionals linked to this facility.</p>
+          <p>Narrow the whole directory to the ${num(f.doctorCount)} professionals linked to this facility, however they are linked.</p>
           <button class="btn btn-primary" type="button" data-facility-filter="${esc(f.name)}">Show these professionals</button>
         </div>
         <p class="aside-note">The register publishes no facility type, so this one is ${esc(provenance)}. Everything else on this page is a published field.</p>

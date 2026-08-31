@@ -48,9 +48,36 @@ export const FACILITY_MATCH = {
   linked: 'All linked facilities',
 };
 
+/**
+  * What the search box searches. This changes the QUERY, not just the chrome.
+  *
+  *   'all'           the combined directory: a term may match a professional or
+  *                   a facility, and a facility may surface because one of its
+  *                   professionals matched. The original behaviour.
+  *   'facilities'    the term is evaluated against the FACILITY's own record.
+  *                   A professional named "Akram" never makes their employer a
+  *                   result for "Akram".
+  *   'professionals' the term is evaluated against the PROFESSIONAL's own
+  *                   record. A doctor never matches because their facility's
+  *                   name happens to contain the term.
+  */
+export const SEARCH_MODES = {
+  all: 'All',
+  facilities: 'Facilities',
+  professionals: 'Professionals',
+};
+
+/** The result view each mode implies. 'all' leaves the choice to the tabs. */
+export const MODE_VIEW = { facilities: 'facilities', professionals: 'doctors' };
+
 export const state = {
   view: 'doctors',
   q: '',
+  searchMode: 'all',
+  /** Page within a facility detail page's professional list (1-based). */
+  facilityPage: 1,
+  /** Specialty chip selected on a facility detail page, or '' for none. */
+  facilitySpecialty: '',
   facilityMatch: 'type',
   categories: new Set(),
   specialties: new Set(),
@@ -109,6 +136,14 @@ export function readUrl() {
   if (layout === 'list' || layout === 'grid') state.layout = layout;
   const ftmode = p.get('ftmode');
   state.facilityMatch = ftmode in FACILITY_MATCH ? ftmode : 'type';
+  const smode = p.get('smode');
+  state.searchMode = smode in SEARCH_MODES ? smode : 'all';
+  // A mode that implies a view wins over ?view=, so a shared link cannot land
+  // in a state the mode selector could not produce.
+  if (MODE_VIEW[state.searchMode]) state.view = MODE_VIEW[state.searchMode];
+  const fp = Number(p.get('fp'));
+  state.facilityPage = Number.isFinite(fp) && fp > 0 ? fp : 1;
+  state.facilitySpecialty = p.get('fspec') ?? '';
   const page = Number(p.get('page'));
   state.page = Number.isFinite(page) && page > 0 ? page : 1;
 }
@@ -125,6 +160,9 @@ export function writeUrl() {
   if (state.layout !== 'grid') p.set('layout', state.layout);
   // Only the non-default mode travels in the URL, so existing links keep working.
   if (state.facilityMatch !== 'type') p.set('ftmode', state.facilityMatch);
+  if (state.searchMode !== 'all') p.set('smode', state.searchMode);
+  if (state.facilityPage > 1) p.set('fp', String(state.facilityPage));
+  if (state.facilitySpecialty) p.set('fspec', state.facilitySpecialty);
   if (state.page > 1) p.set('page', String(state.page));
   const qs = p.toString();
   // Keep the hash. It carries the detail route (#/doctor/<id>), and dropping it

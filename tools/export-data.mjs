@@ -24,6 +24,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { classifyFacility, FACILITY_TYPES } from './facility-type.mjs';
+import { lifecycle } from './lifecycle.mjs';
+import { licenceNamesFor } from './licence-set.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
@@ -47,6 +49,17 @@ console.log(`writing  : ${outDir}`);
 
 const db = new DatabaseSync(dbPath, { readOnly: true });
 
+// ── who counts ──────────────────────────────────────────────────────────────
+// The Doctor table is a superset of the register: ScrapeFlow retains a de-listed
+// professional with `removedAt` stamped rather than deleting the row. The
+// directory publishes the register as it stands, so EVERY read below is scoped
+// to the active set — including the relationship and licence joins, whose rows
+// outlive the professional and would otherwise inflate facility counts with
+// people DHA no longer lists. Nothing is deleted; the removed set is simply not
+// exported, and meta.exclusions records how many that was.
+const life = lifecycle(db);
+console.log(`lifecycle: ${life.describe()}`);
+
 // ── dictionaries ────────────────────────────────────────────────────────────
 const dict = { category: [], specialty: [], licenseType: [], nationality: [], language: [], facility: [] };
 const idx = { category: new Map(), specialty: new Map(), licenseType: new Map(), nationality: new Map(), language: new Map(), facility: new Map() };
@@ -67,7 +80,8 @@ const facilityRows = db.prepare(`
          -- DoctorFacility rows for the SAME facility — one per source section
          -- (search_dto, specialities, experience) — and count(*) would report
          -- each of those as another doctor.
-         (select count(distinct df.doctorId) from DoctorFacility df where df.facilityId = f.id) as doctorCount
+         (select count(distinct df.doctorId) from DoctorFacility df
+           where df.facilityId = f.id and ${life.viaDoctorId('df')}) as doctorCount
   from Facility f order by doctorCount desc, f.nameTrimmed asc`).all();
 
 const slugify = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -120,10 +134,94 @@ const facilityIndexById = new Map(facilities.map((f, i) => [f.id, i]));
  */
 const linksByDoctorId = new Map();
 const pastLinksByDoctorId = new Map();
-const relStats = { current: 0, historical: 0, unknownFacility: 0 };
+/**
+ * The professional's PRIMARY registered facility — the one the register's own
+ * search DTO carries, stored as `relationType = 'search_stage'`.
+ *
+ * This is the relationship DHA's `facilityName` filter counts, so it is the
+ * only one that can produce a facility figure comparable with the register's.
+ * The other current relationships (a licence held there, a placement the
+ * profile still lists) are REAL and are kept in `linksByDoctorId` exactly as
+ * before — this is a second, narrower view of the same untouched data, not a
+ * replacement for it.
+ */
+const primaryLinksByDoctorId = new Map();
+/**
+ * The ROLE the professional holds AT a particular facility.
+ *
+ * `Doctor.speciality` is one value for the whole person — the search DTO's
+ * specialty — but a licence is issued per facility and the register prints the
+ * role on each one (`DoctorFacility.title`, from the profile's specialities
+ * section). Those can differ: the same otolaryngologist is a Consultant at one
+ * hospital and a Specialist at another; an ophthalmologist holds a separate
+ * "Lasik Ophthalmology Privilege" at some of their centres and not others.
+ *
+ * Publishing only the professional-level value attributes ONE role to EVERY
+ * facility, which both invents a specialty at facilities the register does not
+ * associate it with and hides the ones it does. Keyed per (doctor, facility) so
+ * a facility's specialty list and its specialty filter describe the licences
+ * actually held there.
+ *
+ * ONLY `current_license` rows are read: that IS the licence-at-this-facility
+ * relation. Employment history describes a placement, not a current licence,
+ * and the search DTO carries no title at all.
+ */
+const roleTitlesByDoctorId = new Map(); // doctorId -> Map(facilityIdx -> Set(title))
+/**
+ * WHO ACTUALLY PRACTISES AT A FACILITY.
+ *
+ * An active licence alone is NOT enough, and assuming it was is what made this
+ * wrong before. DHA's "Current licences" entry looks like:
+ *
+ *     General Dentist · Active License
+ *     ADAM MEDICAL CENTRE L.L.C  and 1 others  [Show All]
+ *         └─ Other Facilities:  A D A M CLINIC L.L.C
+ *     License: 00009446-002
+ *
+ * The register NAMES one facility and files the rest under "Other Facilities" —
+ * the other premises that one licence covers, not places the professional
+ * works. Publishing every one of them as staff propagates a whole group's
+ * branch list onto every professional on the group licence: PRIME MEDICAL
+ * CENTER AL WARQA read 1,277 against the register's own 62, Primecorp DWC
+ * 1,145 against 8.
+ *
+ * So a facility is this professional's WORKPLACE when an active licence covers
+ * it AND the register states it directly, by any of:
+ *
+ *   named on the licence   the facility printed before "and N others" — the
+ *                          licence's own facility, not an "Other Facilities" entry
+ *   present experience     an experience record DHA marked "(Present)"
+ *   search DTO             the facility the register's search stage publishes
+ *
+ * Measured against DHA's own facilityName filter over 25 facilities and 17,670
+ * of its records: this covers 99.0% of them and is 0.6% smaller, where taking
+ * every active licence was 68.4% larger.
+ *
+ * Every licence row is still inspected and its facility collected;
+ * de-duplication happens only after the whole set is built, so a facility
+ * repeated on several rows can never mask a different facility on a later row.
+ * The result is UNIQUE(professional, facility), never keyed on licence number.
+ * Nothing is deleted: the "Other Facilities" relationships stay in slot 6.
+ */
+const licensedLinksByDoctorId = new Map();   // active licence covers it
+const presentLinksByDoctorId = new Map();    // experience marked "(Present)"
+const relStats = {
+  current: 0, historical: 0, unknownFacility: 0, primary: 0, titled: 0,
+  licenceRows: 0, activeLicenceRows: 0, otherFacilityOnly: 0,
+};
+
+/**
+ * Facility identity for comparing a name PRINTED in licence text against a
+ * stored facility. Punctuation and spacing differ freely between the two
+ * ("A D A M CLINIC L.L.C" vs "ADAM CLINIC LLC"), and this only ever decides
+ * whether a facility ALREADY in the professional's active-licence set was the
+ * one named on the licence — it can never introduce a facility.
+ */
+const facilityKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 for (const l of db.prepare(`
-  select df.doctorId, df.facilityId, df.isCurrent, df.relationType
+  select df.doctorId, df.facilityId, df.isCurrent, df.relationType, df.title, df.statusLabel
   from DoctorFacility df
+  where ${life.viaDoctorId('df')}
   order by df.isCurrent desc, df.createdAt asc`).all()) {
   const idx = facilityIndexById.get(l.facilityId);
   if (idx === undefined) { relStats.unknownFacility++; continue; }
@@ -146,6 +244,43 @@ for (const l of db.prepare(`
   let list = bucket.get(l.doctorId);
   if (!list) bucket.set(l.doctorId, (list = []));
   if (!list.includes(idx)) list.push(idx);
+
+  if (l.relationType === 'current_license') {
+    relStats.licenceRows++;
+    // "Active License" is the register's own wording; anything else (Inactive,
+    // Expired) is a licence the professional may not currently practise under.
+    const active = l.statusLabel === 'Active License';
+    if (active) {
+      relStats.activeLicenceRows++;
+      let set = licensedLinksByDoctorId.get(l.doctorId);
+      if (!set) licensedLinksByDoctorId.set(l.doctorId, (set = new Set()));
+      set.add(idx); // a Set: dedupe is a property of the collection, not an early exit
+    }
+    // The role travels with the licence that states it, and only an active
+    // licence describes what the person may do at that facility today.
+    const title = String(l.title ?? '').replace(/\s+/g, ' ').trim();
+    if (title && active) {
+      relStats.titled++;
+      let byFac = roleTitlesByDoctorId.get(l.doctorId);
+      if (!byFac) roleTitlesByDoctorId.set(l.doctorId, (byFac = new Map()));
+      let set = byFac.get(idx);
+      if (!set) byFac.set(idx, (set = new Set()));
+      set.add(title);
+    }
+  }
+
+  if (l.relationType === 'employment_history' && l.isCurrent === 1) {
+    let set = presentLinksByDoctorId.get(l.doctorId);
+    if (!set) presentLinksByDoctorId.set(l.doctorId, (set = new Set()));
+    set.add(idx);
+  }
+
+  if (l.relationType === 'search_stage') {
+    relStats.primary++;
+    let plist = primaryLinksByDoctorId.get(l.doctorId);
+    if (!plist) primaryLinksByDoctorId.set(l.doctorId, (plist = []));
+    if (!plist.includes(idx)) plist.push(idx);
+  }
 }
 
 /**
@@ -167,11 +302,12 @@ let licenceTypeSource = 'doctor_licence_type';
     .prepare("select count(*) as n from sqlite_master where type='table' and name='DoctorLicenceType'")
     .get().n > 0;
   const rowCount = hasTable
-    ? db.prepare('select count(*) as n from DoctorLicenceType').get().n
+    ? db.prepare(`select count(*) as n from DoctorLicenceType t where ${life.viaDoctorId('t')}`).get().n
     : 0;
 
   if (rowCount > 0) {
-    for (const l of db.prepare('select doctorId, licenceType from DoctorLicenceType').iterate()) {
+    for (const l of db.prepare(`select t.doctorId, t.licenceType from DoctorLicenceType t
+      where ${life.viaDoctorId('t')}`).iterate()) {
       let list = licenceTypesByDoctorId.get(l.doctorId);
       if (!list) licenceTypesByDoctorId.set(l.doctorId, (list = []));
       if (!list.includes(l.licenceType)) list.push(l.licenceType);
@@ -185,22 +321,25 @@ let licenceTypeSource = 'doctor_licence_type';
 const FLAG = { MOBILE: 1, EMAIL: 2, LINKEDIN: 4, EXPERIENCE: 8, EDUCATION: 16 };
 const rows = [];
 const stmt = db.prepare(`
-  select id, dhaUniqueId, name, speciality, facility, licenseType, nationality, languages,
-         mobileNumber, personalEmail, linkedIn, experience, education
-  from Doctor order by name asc`);
+  select d.id, d.dhaUniqueId, d.name, d.speciality, d.facility, d.licenseType, d.nationality,
+         d.languages, d.mobileNumber, d.personalEmail, d.linkedIn, d.experience, d.education,
+         -- The verbatim "Current licences" text. Read to tell the facility a
+         -- licence NAMES from the "Other Facilities" it also covers.
+         d.specialities
+  from Doctor d where ${life.doctor('d')} order by d.name asc`);
 
 const norm = (s) => (s === null || s === undefined ? '' : String(s).replace(/\s+/g, ' ').trim());
 
-/** The search DTO's codes, expanded to the register's own filter vocabulary. */
-const PRIMARY_LICENCE_LABEL = {
-  FTL: 'Full-time License',
-  PTL: 'Part-time License',
-  REG: 'Registered Only',
-  TRL: 'Trainee License',
-};
-
 /** Professionals the relationship layer cannot place. Reported, never hidden. */
 let doctorsWithNoFacility = 0;
+/**
+ * Professionals whose licence types came from the primary scalar because the
+ * membership pass has not reached them yet. Published in meta so the facet's
+ * completeness is a number rather than an assumption.
+ */
+let doctorsOnPrimaryScalar = 0;
+/** (doctor, facility) pairs whose role differs from the professional's own. */
+let roleOverrides = 0;
 
 for (const d of stmt.iterate()) {
   const spec = norm(d.speciality);
@@ -215,14 +354,47 @@ for (const d of stmt.iterate()) {
   // guess as though it were a relationship. Doctors left with none are counted
   // in meta.exclusions instead of being papered over.
   const facIdxs = linksByDoctorId.get(d.id) ?? [];
+  // The register's own primary facility for this professional (slot 10).
+  const primaryIdxs = primaryLinksByDoctorId.get(d.id) ?? [];
+  /**
+   * Slot 12 — where this professional actually practises.
+   *
+   * Every active-licence facility is considered (never just the first), then
+   * kept only when the register names it directly. `namedOnLicence` is read
+   * from the licence text itself: DHA prints the licence's own facility before
+   * "and N others", and lists the rest under "Other Facilities", which are
+   * premises the licence covers rather than places the person works.
+   */
+  const namedOnLicence = new Set();
+  for (const entry of String(d.specialities ?? '').split(' | ')) {
+    const parts = entry.split(' · ');
+    if (parts.length < 2) continue;
+    let printed = parts[1].trim();
+    const collapsed = /^(.*?)\s+and\s+\d+\s+others?\b/i.exec(printed);
+    if (collapsed) printed = collapsed[1].trim();
+    printed = printed.replace(/\s*Show All\s*$/i, '').trim();
+    if (printed) namedOnLicence.add(facilityKey(printed));
+  }
+  const presentAt = presentLinksByDoctorId.get(d.id) ?? new Set();
+  const licensedIdxs = [];
+  for (const fi of licensedLinksByDoctorId.get(d.id) ?? []) {
+    const corroborated =
+      namedOnLicence.has(facilityKey(facilities[fi].name)) ||
+      presentAt.has(fi) ||
+      primaryIdxs.includes(fi);
+    if (corroborated) licensedIdxs.push(fi);
+    else relStats.otherFacilityOnly++;
+  }
+  licensedIdxs.sort((a, b) => a - b);
   if (facIdxs.length === 0) doctorsWithNoFacility++;
   // Former placements, kept distinct from current ones.
   const pastIdxs = (pastLinksByDoctorId.get(d.id) ?? []).filter((i) => !facIdxs.includes(i));
 
-  // The doctor's licence-type SET. Falls back to the primary scalar only when
-  // the join table is empty, and meta records which of the two was used.
-  const licenceNames = licenceTypesByDoctorId.get(d.id)
-    ?? (norm(d.licenseType) ? [PRIMARY_LICENCE_LABEL[norm(d.licenseType)] ?? norm(d.licenseType)] : []);
+  // The doctor's licence-type SET — authoritative membership when the pass has
+  // reached them, the primary scalar when it has not. See tools/licence-set.mjs;
+  // the reconciler validates the facet through the SAME function.
+  const licenceNames = licenceNamesFor(licenceTypesByDoctorId.get(d.id), d.licenseType);
+  if (!licenceTypesByDoctorId.has(d.id) && licenceNames.length > 0) doctorsOnPrimaryScalar++;
   const licenceIdxs = [];
   for (const name of licenceNames) {
     const i = intern('licenseType', name);
@@ -234,6 +406,39 @@ for (const d of stmt.iterate()) {
     .map((x) => x.trim())
     .filter(Boolean)
     .map((x) => intern('language', x));
+
+  /**
+   * Slot 11 — per-facility roles, stored SPARSELY as
+   * `[[facilityIdx, specIdx, ...], ...]`.
+   *
+   * An entry exists only where the register's licence titles at that facility
+   * are not exactly the professional-level specialty, so the common case (one
+   * role everywhere) costs nothing and the reader's rule is simply: the role at
+   * a facility is the override when there is one, otherwise slot 3. A facility
+   * whose licences carry no title keeps slot 3 — that is not a guess, it is the
+   * only role the register states for that person.
+   */
+  // Titles are collected as STRINGS here and interned in a second pass below.
+  // Interning them inline would hand dictionary slots to role labels partway
+  // through the loop and shift every later specialty index, so slot 3 would
+  // change for thousands of rows that mean exactly what they meant before.
+  // Deferring keeps the specialty dictionary identical up to its old length and
+  // appends only the labels that are new, which makes this change provably
+  // additive rather than a re-indexing of the whole file.
+  const facilityRoles = [];
+  {
+    const byFac = roleTitlesByDoctorId.get(d.id);
+    if (byFac) {
+      for (const fi of facIdxs) {
+        const titles = byFac.get(fi);
+        if (!titles || titles.size === 0) continue;
+        // Exactly the professional-level specialty => no override needed.
+        if (titles.size === 1 && titles.has(specialty)) continue;
+        facilityRoles.push([fi, ...titles]);
+        roleOverrides++;
+      }
+    }
+  }
 
   let flags = 0;
   if (norm(d.mobileNumber)) flags |= FLAG.MOBILE;
@@ -253,9 +458,32 @@ for (const d of stmt.iterate()) {
     langs,
     flags,
     pastIdxs,
+    primaryIdxs,
+    facilityRoles,
+    licensedIdxs,
   ]);
 }
 db.close();
+
+// ── resolve per-facility role titles to dictionary indexes ──────────────────
+// Second pass, deliberately: every professional-level specialty has now claimed
+// its slot, so the dictionary is identical to the previous schema up to its old
+// length and role-only labels are appended after it. Slots 0–10 of every row
+// are therefore untouched by this feature.
+{
+  for (const r of rows) {
+    const roles = r[11];
+    for (let k = 0; k < roles.length; k++) {
+      const [fi, ...titles] = roles[k];
+      const idxs = [];
+      for (const t of titles) {
+        const si = intern('specialty', t);
+        if (si >= 0 && !idxs.includes(si)) idxs.push(si);
+      }
+      roles[k] = [fi, ...idxs];
+    }
+  }
+}
 
 // ── reconcile facility counts with what was actually exported ───────────────
 // doctorCount came from a COUNT over DoctorFacility, but a row can also reach a
@@ -270,6 +498,25 @@ db.close();
     for (const fi of new Set(r[6])) perFacility.set(fi, (perFacility.get(fi) ?? 0) + 1);
   }
   for (let i = 0; i < facilities.length; i++) facilities[i].doctorCount = perFacility.get(i) ?? 0;
+
+  // DHA-aligned figure: professionals whose PRIMARY registered facility is this
+  // one. Derived from the same exported rows, so the number on a card is
+  // exactly how many the directory can list as registered here.
+  const perPrimary = new Map();
+  for (const r of rows) {
+    for (const fi of new Set(r[10])) perPrimary.set(fi, (perPrimary.get(fi) ?? 0) + 1);
+  }
+  for (let i = 0; i < facilities.length; i++) facilities[i].primaryCount = perPrimary.get(i) ?? 0;
+
+  // The facility's STAFF figure: professionals holding an active current
+  // licence here. This is what a facility page counts and lists; doctorCount
+  // (every current relationship) and primaryCount (the register's primary
+  // registration) are retained beside it because they answer other questions.
+  const perLicensed = new Map();
+  for (const r of rows) {
+    for (const fi of new Set(r[12])) perLicensed.set(fi, (perLicensed.get(fi) ?? 0) + 1);
+  }
+  for (let i = 0; i < facilities.length; i++) facilities[i].licensedCount = perLicensed.get(i) ?? 0;
   // NOTE: facilities must NOT be re-sorted here. A facility's position in this
   // array IS its dictionary index, and doctor rows already reference it.
   // Consumers that want "most staffed first" sort a copy at read time.
@@ -352,9 +599,35 @@ const meta = {
   // v3: row slot 4 is licenceTypeIdxs (an ARRAY) rather than a single index —
   // a professional can hold several licence types at once. Slot 6 became an
   // array in v2 for the same reason on the facility side.
-  version: 3,
+  // v4: row slot 10 is primaryFacilityIdxs — the register's own primary
+  // facility for the professional, which is what DHA's facility filter counts.
+  // v5: row slot 11 is facilityRoles — the role held AT a given facility, where
+  // the register's licence title there differs from the professional-level
+  // specialty. Sparse: absent means "slot 3 applies at this facility".
+  // v6: row slot 12 is licensedFacilityIdxs — facilities where the professional
+  // holds an ACTIVE current licence. This is a facility's staff population;
+  // slot 6 (every current relationship) and slot 10 (primary registration)
+  // remain unchanged beside it and answer different questions.
+  version: 6,
   /** Which source the licence-type facet was built from. */
   licenceTypeSource,
+  /**
+   * How many professionals fell back to the primary scalar because the
+   * membership pass has not covered them yet (see tools/licence-set.mjs).
+   * 0 means every published licence type came from the authoritative set.
+   */
+  licenceTypeFallbackDoctors: doctorsOnPrimaryScalar,
+  /**
+   * Which professionals this dataset represents. `source` names the column the
+   * active set was derived from, so a dataset built against a database with no
+   * lifecycle tracking is recognisably different from one that filtered.
+   */
+  lifecycle: {
+    source: life.source,
+    totalDoctorRecords: life.totalDoctors,
+    activeDoctors: life.activeDoctors,
+    removedDoctors: life.removedDoctors,
+  },
   totals: {
     doctors: rows.length,
     facilities: facilities.length,
@@ -367,6 +640,13 @@ const meta = {
     languages: facets.language.length,
     doctorsWithContact: withContact,
     facilityTypes: facilityTypeStats.byType.size,
+    /** Sum of primaryCount — distinct (doctor, primary facility) pairs. */
+    doctorPrimaryFacilityLinks: facilities.reduce((s, f) => s + f.primaryCount, 0),
+    /**
+     * Sum of licensedCount — distinct (doctor, facility) pairs backed by an
+     * ACTIVE current licence. The facility staff population.
+     */
+    doctorLicensedFacilityLinks: facilities.reduce((s, f) => s + f.licensedCount, 0),
   },
   /**
    * The facility-type vocabulary, shipped WITH the data so the UI can never
@@ -402,9 +682,20 @@ const meta = {
      * regression in the rules is a number rather than a surprise in the UI.
      */
     facilitiesWithNoType: unclassifiedFacilities,
+    /**
+     * Professionals DHA no longer lists. Their rows, relationships, licences
+     * and profiles are all retained in ScrapeFlow; none of it is published.
+     */
+    removedProfessionals: life.removedDoctors,
   },
   flags: FLAG,
-  rowSchema: ['id', 'name', 'categoryIdx', 'specialtyIdx', 'licenceTypeIdxs', 'nationalityIdx', 'facilityIdxs', 'languageIdxs', 'flags', 'pastFacilityIdxs'],
+  rowSchema: ['id', 'name', 'categoryIdx', 'specialtyIdx', 'licenceTypeIdxs', 'nationalityIdx', 'facilityIdxs', 'languageIdxs', 'flags', 'pastFacilityIdxs', 'primaryFacilityIdxs', 'facilityRoles', 'licensedFacilityIdxs'],
+  /**
+   * (doctor, facility) pairs where the register's licence title at that
+   * facility is not the professional-level specialty, and slot 11 therefore
+   * carries an override. Published so the size of the correction is auditable.
+   */
+  facilityRoleOverrides: roleOverrides,
 };
 
 const write = (file, obj) => {
@@ -416,17 +707,23 @@ const write = (file, obj) => {
 write('meta.json', meta);
 write('facets.json', { version: 1, dict, facets });
 write('facilities.json', { version: 2, facilityTypeLabels: FACILITY_TYPES, facilities });
-write('doctors.json', { version: 3, count: rows.length, rows });
+write('doctors.json', { version: 6, count: rows.length, rows });
 
 console.log('\ndone.');
 console.log(`  doctors    ${meta.totals.doctors.toLocaleString()}`);
 console.log(`  facilities ${meta.totals.facilities.toLocaleString()}`);
 console.log(`  licence types  ${facets.licenseType.map((x) => `${x.label}=${x.count}`).join(' · ')}`);
 console.log(`  licence source ${licenceTypeSource}`);
+console.log(`  primary links  ${meta.totals.doctorPrimaryFacilityLinks.toLocaleString()} (DHA-aligned) vs ${meta.totals.doctorFacilityLinks.toLocaleString()} all-linked`);
+console.log(`  staff links    ${meta.totals.doctorLicensedFacilityLinks.toLocaleString()} (active licence corroborated by the register)`);
+console.log(`  licence rows   ${relStats.licenceRows.toLocaleString()} current, of which ${relStats.activeLicenceRows.toLocaleString()} active`);
+console.log(`  other-facility ${relStats.otherFacilityOnly.toLocaleString()} licence coverages held back from staff lists (kept in all-linked)`);
 console.log(`  facility types ${facilityTypeStats.byType.size} in use · unclassified ${unclassifiedFacilities}`);
 for (const [type, n] of [...facilityTypeStats.byType].sort((a, b) => b[1] - a[1])) {
   console.log(`      ${String(n).padStart(5)}  ${(FACILITY_TYPES[type] ?? type).padEnd(38)} ${type}`);
 }
 console.log(`  type source    ${[...facilityTypeStats.bySource].sort((a, b) => b[1] - a[1]).map(([s, n]) => `${s}=${n}`).join(' · ')}`);
+console.log(`  removed        ${life.removedDoctors.toLocaleString()} de-listed professionals (not exported)`);
 console.log(`  no facility    ${doctorsWithNoFacility.toLocaleString()} professionals (excluded, see meta.exclusions)`);
 console.log(`  specialties ${meta.totals.specialties} · categories ${meta.totals.categories} · languages ${meta.totals.languages} · nationalities ${meta.totals.nationalities}`);
+

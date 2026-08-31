@@ -6,10 +6,10 @@
  */
 import {
   db, R, FLAG, rowFacilityIdxs, rowFacilityCount, forEachFacilityIdx, rowHasFacilityIn,
-  rowLicenceIdxs, facilityTypeKey,
+  rowLicenceIdxs, facilityTypeKey, rowLicensedIn,
 } from './data.js';
-import { state, MULTI } from './state.js';
-import { fold } from './utils.js';
+import { state, MULTI, isFiltered } from './state.js';
+import { fold, facilityTypeLabel } from './utils.js';
 
 /** Toggles backed directly by a bit in row[R.FLAGS]. */
 const TOGGLE_FLAG = {
@@ -69,7 +69,15 @@ function buildTermMatchers(terms) {
   return terms.map((t) => ({ t, spec: specOf(t), cat: catOf(t), fac: facOf(t) }));
 }
 
-function rowMatchesTerms(row, i, matchers, rawQ, idQuery) {
+/**
+  * Does this professional's OWN record match every term?
+  *
+  * `allowFacilityText` is true only in ALL mode, where the combined directory
+  * deliberately lets a facility name find the people who work there. In
+  * PROFESSIONALS mode it is false, so a doctor can never match because their
+  * employer's name contains the term.
+  */
+function rowMatchesTerms(row, i, matchers, idQuery, allowFacilityText) {
   if (!matchers.length) return true;
   // Licence / DHA id search: digits typed straight into the box.
   if (idQuery && String(row[R.ID]).includes(idQuery)) return true;
@@ -80,7 +88,7 @@ function rowMatchesTerms(row, i, matchers, rawQ, idQuery) {
     if (name.includes(m.t)) continue;
     if (row[R.SPECIALTY] >= 0 && m.spec.has(row[R.SPECIALTY])) continue;
     if (row[R.CATEGORY] >= 0 && m.cat.has(row[R.CATEGORY])) continue;
-    if (m.fac.size && rowHasFacilityIn(row, m.fac)) continue;
+    if (allowFacilityText && m.fac.size && rowHasFacilityIn(row, m.fac)) continue;
     return false;
   }
   return true;
@@ -91,6 +99,51 @@ export function primeSearchIndex() {
   db.foldedSpecialty = db.dict.specialty.map(fold);
   db.foldedCategory = db.dict.category.map(fold);
   db.foldedFacility = db.dict.facility.map(fold);
+  /**
+   * A facility's OWN searchable text: its registered name plus its classified
+   * type label. Nothing about the professionals licensed there.
+   *
+   * This is what FACILITIES mode matches against, and it is the whole fix for
+   * the leak: "Akram" can only reach a facility if the facility itself says
+   * "Akram". Indexed by facility dictionary position, which is also the
+   * position in db.facilities.
+   */
+  db.foldedFacilitySelf = db.facilities.map(
+    (f) => `${fold(f.name)} ${fold(facilityTypeLabel(f.type))}`,
+  );
+}
+
+/**
+ * Is any PROFESSIONAL-side filter narrowing the result set?
+ *
+ * In FACILITIES mode a facility whose own record matches is a result even when
+ * no professional currently matches — unless the visitor is also filtering by
+ * something about the people, in which case "facilities with staff like this"
+ * is what they asked for and an empty facility is not an answer.
+ */
+function anyProfessionalFilterActive() {
+  return state.categories.size > 0 || state.specialties.size > 0
+    || state.languages.size > 0 || state.nationalities.size > 0
+    || state.licences.size > 0 || state.toggles.size > 0;
+}
+
+/**
+ * Facility dictionary indices whose OWN record matches every term.
+ * Returns null when there is no query (i.e. "everything matches").
+ */
+function facilityIdxsMatchingTerms(terms) {
+  if (!terms.length) return null;
+  const self = db.foldedFacilitySelf ?? [];
+  const out = new Set();
+  for (let i = 0; i < self.length; i++) {
+    const hay = self[i];
+    let ok = true;
+    for (let k = 0; k < terms.length; k++) {
+      if (!hay.includes(terms[k])) { ok = false; break; }
+    }
+    if (ok) out.add(i);
+  }
+  return out;
 }
 
 /**
@@ -103,6 +156,23 @@ export function runQuery() {
   const matchers = buildTermMatchers(terms);
   const rawQ = state.q;
   const idQuery = /^\d{4,}$/.test(rawQ.trim()) ? rawQ.trim() : null;
+
+  /**
+   * How the text query is applied, by mode:
+   *
+   *   all           the professional's own fields OR their facility's name
+   *                 (the combined directory, unchanged).
+   *   professionals the professional's own fields only.
+   *   facilities    the query is a FACILITY query, so it is not applied to the
+   *                 professional's fields at all. Instead the result set is
+   *                 restricted to people licensed at a facility whose own
+   *                 record matches — which keeps the facets ("what do the staff
+   *                 of the matching facilities practise?") meaningful.
+   */
+  const mode = state.searchMode;
+  const allowFacilityText = mode === 'all';
+  const facilityTermIdxs = mode === 'facilities' ? facilityIdxsMatchingTerms(terms) : null;
+  const rowMatchers = mode === 'facilities' ? [] : matchers;
   const toggleMask = [...state.toggles].reduce((m, t) => m | (TOGGLE_FLAG[t] ?? 0), 0);
   const toggleTests = [...state.toggles].map((t) => TOGGLE_TEST[t]).filter(Boolean);
 
@@ -113,7 +183,9 @@ export function runQuery() {
     const row = rows[i];
     if (sets.cat && !sets.cat.has(row[R.CATEGORY])) continue;
     if (sets.spec && !sets.spec.has(row[R.SPECIALTY])) continue;
-    if (sets.fac && !rowHasFacilityIn(row, sets.fac)) continue;
+    // Filtering BY a facility asks who practises there, so it uses the same
+    // population the facility's own page lists: an active current licence.
+    if (sets.fac && !rowLicensedIn(row, sets.fac)) continue;
     if (sets.ftype) {
       let hit = sets.ftype.has(db.rowFType[i]);
       if (!hit) {
@@ -144,7 +216,8 @@ export function runQuery() {
       for (let k = 0; k < langs.length; k++) if (sets.lang.has(langs[k])) { ok = true; break; }
       if (!ok) continue;
     }
-    if (!rowMatchesTerms(row, i, matchers, rawQ, idQuery)) continue;
+    if (facilityTermIdxs && !rowHasFacilityIn(row, facilityTermIdxs)) continue;
+    if (!rowMatchesTerms(row, i, rowMatchers, idQuery, allowFacilityText)) continue;
     matches.push(i);
   }
   return matches;
@@ -314,6 +387,39 @@ export function facilityResults(matchedRowIdx) {
   }
 
   /**
+   * FACILITIES mode: the result set IS the set of facilities whose own record
+   * matches, not the facilities of whoever matched.
+   *
+   * The list above was assembled from the matching PROFESSIONALS, which is what
+   * let a doctor named "Akram" put their employer into an "Akram" search. Here
+   * the list is rebuilt from `db.facilities` directly and filtered by the
+   * facility's own searchable text, so a professional can never contribute a
+   * facility that does not itself match.
+   */
+  if (state.searchMode === 'facilities') {
+    const terms0 = buildTerms(state.q);
+    const selfIdxs = facilityIdxsMatchingTerms(terms0);
+    const counts = new Map();
+    for (const i of matchedRowIdx) {
+      forEachFacilityIdx(rows[i], (fi) => counts.set(fi, (counts.get(fi) ?? 0) + 1));
+    }
+    list = [];
+    for (let fi = 0; fi < db.facilities.length; fi++) {
+      if (selfIdxs && !selfIdxs.has(fi)) continue;
+      const f = db.facilities[fi];
+      if (!f) continue;
+      // With no query and no filters, keep the existing "staffed only" rule.
+      if (!selfIdxs && !isFiltered() && f.doctorCount === 0) continue;
+      const n = counts.get(fi);
+      // A facility whose own record matches is a result even when the active
+      // professional filters leave it with no matching staff — but only when
+      // no professional-side filter is narrowing the set.
+      if (n === undefined && anyProfessionalFilterActive()) continue;
+      list.push(n === undefined ? { ...f } : { ...f, matchingDoctors: n });
+    }
+  }
+
+  /**
    * Facility-type filtering, resolved against the FACILITY'S OWN stored type.
    *
    * The list above is built from the matching PROFESSIONALS, so it contains
@@ -333,9 +439,9 @@ export function facilityResults(matchedRowIdx) {
     list = list.filter((f) => state.facilityTypes.has(facilityTypeKey(f)));
   }
 
-  // A facility name search should still work when no professional matched.
+  // ALL mode: a facility name search still works when no professional matched.
   const terms = buildTerms(state.q);
-  if (terms.length && !filtered) {
+  if (state.searchMode !== 'facilities' && terms.length && !filtered) {
     list = list.filter((f) => {
       const n = fold(f.name);
       return terms.every((t) => n.includes(t));

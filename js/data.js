@@ -27,8 +27,131 @@ export const R = {
   // LICENCE is an ARRAY of dictionary indices (schema v3): the register lets
   // one professional hold several licence types at once. FACILITY has been an
   // array since v2 for the same reason.
+  //
+  // PRIMARY (schema v4) is the register's OWN primary facility for this
+  // professional — the `search_stage` relationship. FACILITY is the union of
+  // every current relationship and stays exactly as it was; PRIMARY is the
+  // narrower view that DHA's facility filter counts.
+  // ROLES (schema v5) is the role held AT a given facility, stored sparsely as
+  // [[facilityIdx, specialtyIdx, ...], ...]. A licence is issued per facility
+  // and the register prints its own title on each, so the same person can be a
+  // Consultant at one hospital and a Specialist at another. SPECIALTY (slot 3)
+  // remains the professional-level value the register's own specialty filter
+  // uses; ROLES only overrides it where the register says something different
+  // at a particular facility. Read it through `rowRolesAt()`.
+  // LICENSED (schema v6) is where the professional holds an ACTIVE current
+  // licence. That — not FACILITY, and not PRIMARY — is a facility's staff:
+  // FACILITY is the union of every current relationship (a job, a primary
+  // registration, a licence), and PRIMARY is the single registration the
+  // register's search stage names. Being employed somewhere, or registered
+  // elsewhere, is not a licence to practise here.
   ID: 0, NAME: 1, CATEGORY: 2, SPECIALTY: 3, LICENCE: 4, NATIONALITY: 5, FACILITY: 6, LANGUAGES: 7, FLAGS: 8,
+  PAST: 9, PRIMARY: 10, ROLES: 11, LICENSED: 12,
 };
+
+/**
+ * The facility dictionary indices the register lists as this professional's
+ * PRIMARY registration. Empty on a pre-v4 dataset, so an older data/ directory
+ * degrades to "no primary information" rather than breaking.
+ */
+export function rowPrimaryFacilityIdxs(r) {
+  const v = r[R.PRIMARY];
+  if (typeof v === 'number') return v >= 0 ? [v] : [];
+  if (!Array.isArray(v) || v.length === 0) return [];
+  const out = [];
+  for (const idx of v) if (idx >= 0 && !out.includes(idx)) out.push(idx);
+  return out;
+}
+
+/**
+ * The facilities where this professional holds an ACTIVE current licence —
+ * the facilities whose staff list they belong on.
+ *
+ * On a pre-v6 dataset the slot is absent. Rather than silently showing an
+ * empty facility, the reader falls back to the all-linked set, which is what
+ * the directory listed before this distinction existed.
+ */
+export function rowLicensedFacilityIdxs(r) {
+  const v = r[R.LICENSED];
+  if (v === undefined) return rowFacilityIdxs(r);
+  if (typeof v === 'number') return v >= 0 ? [v] : [];
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  for (const idx of v) if (idx >= 0 && !out.includes(idx)) out.push(idx);
+  return out;
+}
+
+/** True when an ACTIVE current licence places this professional at that facility. */
+export function rowIsLicensedAt(r, facilityIdx) {
+  const v = r[R.LICENSED];
+  if (v === undefined) return rowFacilityIdxs(r).includes(facilityIdx);
+  if (typeof v === 'number') return v === facilityIdx;
+  if (!Array.isArray(v)) return false;
+  for (let k = 0; k < v.length; k++) if (v[k] === facilityIdx) return true;
+  return false;
+}
+
+/**
+ * How many professionals a facility's staff list holds: those with an active
+ * current licence there. Falls back to the all-linked count on a pre-v6
+ * dataset so nothing renders blank.
+ */
+export const facilityLicensedCount = (f) =>
+  (f && typeof f.licensedCount === 'number') ? f.licensedCount : (f?.doctorCount ?? 0);
+
+/**
+ * The specialty dictionary indices this professional is licensed under AT a
+ * particular facility.
+ *
+ * The register issues a licence per facility and prints its role on each, so
+ * "which specialties does this facility have" and "does this person practise
+ * specialty X here" are questions about the LICENCE, not about the person.
+ * Slot 11 carries an override only where the facility's licence titles differ
+ * from the professional-level specialty; everywhere else — and on any pre-v5
+ * dataset — the professional-level value is what the register states, so it is
+ * returned unchanged.
+ */
+export function rowRolesAt(r, facilityIdx) {
+  const roles = r[R.ROLES];
+  if (Array.isArray(roles)) {
+    for (let k = 0; k < roles.length; k++) {
+      const entry = roles[k];
+      if (entry && entry[0] === facilityIdx) {
+        const out = [];
+        for (let j = 1; j < entry.length; j++) if (entry[j] >= 0) out.push(entry[j]);
+        if (out.length) return out;
+      }
+    }
+  }
+  const si = r[R.SPECIALTY];
+  return si >= 0 ? [si] : [];
+}
+
+/** True when the register licenses this professional for `label` at that facility. */
+export function rowHasRoleAt(r, facilityIdx, label) {
+  const idxs = rowRolesAt(r, facilityIdx);
+  for (let k = 0; k < idxs.length; k++) {
+    if (db.dict.specialty[idxs[k]] === label) return true;
+  }
+  return false;
+}
+
+/** True when this professional is PRIMARILY registered at that facility index. */
+export function rowIsPrimaryAt(r, facilityIdx) {
+  const v = r[R.PRIMARY];
+  if (typeof v === 'number') return v === facilityIdx;
+  if (!Array.isArray(v)) return false;
+  for (let k = 0; k < v.length; k++) if (v[k] === facilityIdx) return true;
+  return false;
+}
+
+/**
+ * The DHA-aligned headline figure for a facility: professionals whose PRIMARY
+ * registered facility is this one. Falls back to the all-linked count on a
+ * pre-v4 dataset so nothing renders blank.
+ */
+export const facilityPrimaryCount = (f) =>
+  (f && typeof f.primaryCount === 'number') ? f.primaryCount : (f?.doctorCount ?? 0);
 
 /**
  * Every facility dictionary index for a row, as an array, in published order.
@@ -78,6 +201,23 @@ export function forEachFacilityIdx(r, fn) {
 /** True when the row links to any facility whose index is in `set`. */
 export function rowHasFacilityIn(r, set) {
   const v = r[R.FACILITY];
+  if (typeof v === 'number') return v >= 0 && set.has(v);
+  if (!Array.isArray(v)) return false;
+  for (let k = 0; k < v.length; k++) if (v[k] >= 0 && set.has(v[k])) return true;
+  return false;
+}
+
+/**
+ * True when an ACTIVE current licence places the row at any facility in `set`.
+ *
+ * This is what "filter by facility" means: the professionals a facility would
+ * list. `rowHasFacilityIn` answers the looser "has any current relationship
+ * with", which would return people who merely worked there or are registered
+ * elsewhere — a different question, and not the one a facility filter asks.
+ */
+export function rowLicensedIn(r, set) {
+  const v = r[R.LICENSED];
+  if (v === undefined) return rowHasFacilityIn(r, set); // pre-v6 dataset
   if (typeof v === 'number') return v >= 0 && set.has(v);
   if (!Array.isArray(v)) return false;
   for (let k = 0; k < v.length; k++) if (v[k] >= 0 && set.has(v[k])) return true;

@@ -46,6 +46,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseExperience, parseEducation } from './parse-profile.mjs';
+import { lifecycle } from './lifecycle.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
@@ -78,6 +79,13 @@ mkdirSync(outDir, { recursive: true });
 
 const db = new DatabaseSync(dbPath, { readOnly: true });
 
+// Profiles are exported for the ACTIVE register only, matching doctors.json.
+// A shard keyed by a de-listed professional's id would be a record the
+// directory can never route to, and its education would be counted against a
+// population that no longer contains them. See tools/lifecycle.mjs.
+const life = lifecycle(db);
+console.log(`lifecycle: ${life.describe()}`);
+
 /**
  * Current licences, read from the RELATIONAL table rather than re-parsing text.
  * These are the placements the register still lists as held, with the licence
@@ -88,7 +96,7 @@ for (const l of db.prepare(`
   select df.doctorId, df.licenseNumber, df.statusLabel, df.sourceText, f.nameTrimmed as facility
   from DoctorFacility df
   join Facility f on f.id = df.facilityId
-  where df.relationType = 'current_license'
+  where df.relationType = 'current_license' and ${life.viaDoctorId('df')}
   order by df.createdAt asc`).all()) {
   let list = licencesByDoctor.get(l.doctorId);
   if (!list) licencesByDoctor.set(l.doctorId, (list = []));
@@ -128,9 +136,9 @@ let eduEntries = 0;
 let workEntries = 0;
 
 for (const d of db.prepare(`
-  select id, dhaUniqueId, experience, education,
-         mobileNumber, mobileNumber2, personalEmail, linkedIn, extraFields
-  from Doctor`).iterate()) {
+  select d.id, d.dhaUniqueId, d.experience, d.education,
+         d.mobileNumber, d.mobileNumber2, d.personalEmail, d.linkedIn, d.extraFields
+  from Doctor d where ${life.doctor('d')}`).iterate()) {
   const rec = {};
 
   const work = parseExperience(d.experience).map((e) => {

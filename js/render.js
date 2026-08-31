@@ -7,11 +7,13 @@
  */
 import {
   db, R, FLAG, rowFacility, rowFacilityCount, rowLanguages, rowHas, facilityTopSpecialties,
-  rowLicences,
+  rowLicences, facilityPrimaryCount, facilityLicensedCount,
   doctorHref, facilityHref,
 } from './data.js';
 import { state, MULTI, TOGGLES, activeFilterCount } from './state.js';
-import { $, esc, num, initials, facilityTypeLabel, LICENCE_LABEL, specialtyLabel } from './utils.js';
+import {
+  $, esc, num, initials, facilityTypeLabel, facilityTypeIcon, LICENCE_LABEL, specialtyLabel,
+} from './utils.js';
 
 const ICON = {
   facility: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17h14M5 17V7l5-3 5 3v10M8.5 10h3M10 8.5v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -90,8 +92,13 @@ function doctorCard(rowIdx) {
 /* ═══ facility card (results view) ══════════════════════════ */
 function facilityCard(f) {
   const type = facilityTypeLabel(f.type);
-  const shown = f.matchingDoctors ?? f.doctorCount;
-  const partial = f.matchingDoctors !== undefined && f.matchingDoctors !== f.doctorCount;
+  // The DHA-ALIGNED figure: professionals whose PRIMARY registered facility is
+  // this one, which is exactly what the register's own facility filter counts.
+  // The all-linked total (a licence held here, a placement still listed) is a
+  // real and larger number, but it is not what "professionals at this facility"
+  // means to a visitor comparing against DHA — so it is labelled separately on
+  // the detail page rather than mixed in here.
+  const shown = facilityLicensedCount(f);
   const top = facilityTopSpecialties(f);
 
   const marks = [];
@@ -104,7 +111,7 @@ function facilityCard(f) {
       <div class="avatar facility" aria-hidden="true">${ICON.facility}</div>
       <div class="card-head-text">
         <h3 class="card-name"><a href="${facilityHref(f)}" data-facility="${esc(f.id)}">${esc(f.name)}</a></h3>
-        <p class="card-role">${num(shown)} ${shown === 1 ? 'professional' : 'professionals'}${partial ? ` of ${num(f.doctorCount)}` : ''}</p>
+        <p class="card-role">${num(shown)} registered ${shown === 1 ? 'professional' : 'professionals'}</p>
       </div>
     </div>
     ${top.length ? `<div class="card-meta">
@@ -133,8 +140,8 @@ function facilityCard(f) {
  */
 function facilityRow(f) {
   const type = facilityTypeLabel(f.type);
-  const shown = f.matchingDoctors ?? f.doctorCount;
-  const partial = f.matchingDoctors !== undefined && f.matchingDoctors !== f.doctorCount;
+  // Same DHA-aligned figure as the grid card and the detail page.
+  const shown = facilityLicensedCount(f);
   const top = facilityTopSpecialties(f);
 
   return `<article class="frow">
@@ -163,7 +170,7 @@ function facilityRow(f) {
 
     <div class="frow-count">
       <b>${num(shown)}</b>
-      <span>${shown === 1 ? 'professional' : 'professionals'}${partial ? ` of ${num(f.doctorCount)}` : ''}</span>
+      <span>registered</span>
     </div>
 
     <div class="frow-actions">
@@ -302,9 +309,30 @@ export function renderHeroSelects() {
     el.insertAdjacentHTML('beforeend', items
       .map((x) => `<option value="${esc(x.label)}">${esc(label(x))} (${num(x.count)})</option>`).join(''));
   };
+  // ALL — unchanged.
   fill('#heroCategory', db.facets.category);
   fill('#heroSpecialty', db.facets.specialty.slice(0, 60), (x) => specialtyLabel(x.label));
   fill('#heroFacilityType', db.facets.facilityType, (x) => facilityTypeLabel(x.label));
+
+  // FACILITIES — the facility's own classification, and the services its
+  // registered staff practise. Both come from facility-side facets.
+  fill('#facCategory', db.facets.facilityType, (x) => facilityTypeLabel(x.label));
+  fill('#facSpecialities', db.facets.specialty.slice(0, 60), (x) => specialtyLabel(x.label));
+
+  // PROFESSIONALS — the four primary, then the advanced row.
+  const sortEl = $('#proSort');
+  if (sortEl) {
+    // Mirrors the results toolbar's own sort options, so the two never disagree.
+    sortEl.innerHTML = [...$('#sortSelect').options]
+      .map((o) => `<option value="${esc(o.value)}">${esc(o.textContent.replace(/^Sort:\s*/, ''))}</option>`)
+      .join('');
+  }
+  fill('#proLicence', db.facets.licenseType, (x) => LICENCE_LABEL[x.label] ?? x.label);
+  fill('#proCategory', db.facets.category);
+  fill('#proSpecialty', db.facets.specialty.slice(0, 60), (x) => specialtyLabel(x.label));
+  fill('#proLanguage', db.facets.language.slice(0, 60));
+  fill('#proFacility', db.facets.facility.slice(0, 60));
+  fill('#proNationality', db.facets.nationality.slice(0, 60));
 }
 
 /* ═══ popular searches — the real top specialties ═══════════ */
@@ -332,6 +360,7 @@ export function renderNetwork() {
       <span class="etile-plane ${PLANES[i % PLANES.length]}" aria-hidden="true"></span>
       <span class="etile-grid" aria-hidden="true"></span>
       <span class="etile-scrim" aria-hidden="true"></span>
+      <span class="etile-icon" aria-hidden="true">${facilityTypeIcon(t.type)}</span>
       <span class="etile-content">
         <span class="etile-kicker">Facility type</span>
         <span class="etile-name">${esc(label)}</span>
@@ -345,7 +374,7 @@ export function renderNetwork() {
 /* ═══ featured facilities — real records ════════════════════ */
 export function renderFacilityFeature() {
   const host = $('#facilityFeature');
-  const top = [...db.facilities].sort((a, b) => b.doctorCount - a.doctorCount).slice(0, 6);
+  const top = [...db.facilities].sort((a, b) => facilityLicensedCount(b) - facilityLicensedCount(a)).slice(0, 6);
   host.innerHTML = top.map((f, i) => {
     const type = facilityTypeLabel(f.type);
     const specs = facilityTopSpecialties(f);
@@ -357,7 +386,7 @@ export function renderFacilityFeature() {
       </div>
       <div class="fac-info">
         <h3 class="fac-name"><a href="${facilityHref(f)}">${esc(f.name)}</a></h3>
-        <p class="fac-sub">${type ? `${esc(type)} <span aria-hidden="true">·</span> ` : ''}<b>${num(f.doctorCount)}</b> professionals</p>
+        <p class="fac-sub">${type ? `${esc(type)} <span aria-hidden="true">·</span> ` : ''}<b>${num(facilityLicensedCount(f))}</b> professionals</p>
         ${specs.length ? `<div class="fac-specs">${specs.map((s) => `<span class="tag">${esc(specialtyLabel(s.label))}</span>`).join('')}</div>` : ''}
       </div>
     </article>`;

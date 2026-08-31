@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Doctorna Intelligence — Healthcare news, research and insights</title>
+<meta name="description" content="Healthcare news, research and insights — connected to the healthcare professionals and facilities behind the industry. Every item carries its original source, publication date and retrieval date.">
+<link rel="canonical" href="/intelligence/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Doctorna Intelligence">
+<meta property="og:title" content="Doctorna Intelligence">
+<meta property="og:description" content="Healthcare news, research and insights — connected to the professionals and facilities behind the industry.">
+<meta property="og:url" content="/intelligence/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Doctorna Intelligence">
+<meta name="twitter:description" content="Healthcare news, research and insights, connected to the Doctorna directory.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/intelligence/intel.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"CollectionPage","name":"Doctorna Intelligence",
+ "description":"Healthcare news, research and insights connected to the Doctorna healthcare directory.",
+ "isPartOf":{"@type":"WebSite","name":"Doctorna"}}
+</script>
+</head>
+<body class="intel-body">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="intel-mast">
+  <div class="intel-mast-in">
+    <a class="intel-mark" href="/intelligence/">
+      <b>Doctorna</b><span>Intelligence</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="/" class="intel-hide-sm">Directory</a>
+      <a href="#uae">UAE</a>
+      <a href="#latest">Latest</a>
+      <a href="#categories" class="intel-hide-sm">Categories</a>
+      <a href="#research">Research</a>
+    </nav>
+  </div>
+</header>
+
+<main class="intel-wrap" id="main">
+
+  <section class="intel-hero">
+    <p class="intel-eyebrow">Healthcare Intelligence</p>
+    <h1>Doctorna Intelligence</h1>
+    <p>Healthcare news, research and insights — connected to the healthcare professionals and
+       facilities behind the industry. Every item keeps its original source, publication date
+       and the date Doctorna retrieved it.</p>
+  </section>
+
+  <!-- Signals render only when the published dataset supports them. With no
+       articles the section stays absent rather than showing invented figures. -->
+  <section class="intel-sec" id="signals" hidden>
+    <div class="intel-sec-head">
+      <h2>Healthcare signals</h2>
+      <p>Derived from what has actually been published.</p>
+    </div>
+    <div class="intel-signals" id="signalGrid"></div>
+  </section>
+
+  <section class="intel-sec" id="featured">
+    <div class="intel-sec-head">
+      <h2>Featured intelligence</h2>
+      <span class="intel-count" id="featuredCount"></span>
+    </div>
+    <div id="featuredHost">
+      <div class="intel-skel" style="width:60%"></div>
+      <div class="intel-skel" style="width:85%"></div>
+      <div class="intel-skel" style="width:40%"></div>
+    </div>
+  </section>
+
+  <section class="intel-sec" id="categories">
+    <div class="intel-sec-head">
+      <h2>Categories</h2>
+      <p>Filter the stream below.</p>
+    </div>
+    <div class="intel-cats" id="catRail" role="group" aria-label="Filter by category"></div>
+  </section>
+
+  <!-- UAE leads. Global content is separated below, never hidden. -->
+  <section class="intel-sec" id="uae" hidden>
+    <div class="intel-sec-head">
+      <h2>UAE healthcare news</h2>
+      <p>From UAE health authorities and providers.</p>
+      <span class="intel-count" id="uaeCount"></span>
+    </div>
+    <div class="intel-grid" id="uaeHost"></div>
+  </section>
+
+  <section class="intel-sec" id="latest">
+    <div class="intel-sec-head">
+      <h2>All healthcare news</h2>
+      <span class="intel-count" id="latestCount"></span>
+    </div>
+    <div class="intel-tools">
+      <label class="intel-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="sr-only">Search intelligence</span>
+        <input id="intelSearch" type="search" autocomplete="off" placeholder="Search headlines, sources or topics…">
+      </label>
+      <select class="intel-select" id="intelType" aria-label="Filter by content type">
+        <option value="">Any type</option>
+      </select>
+      <select class="intel-select" id="intelSource" aria-label="Filter by source">
+        <option value="">Any source</option>
+      </select>
+    </div>
+    <div class="intel-grid" id="streamHost"></div>
+    <div id="streamEmpty" hidden class="intel-empty">
+      <h3>Nothing matches those filters</h3>
+      <p>Try a different category, type or search term.</p>
+    </div>
+    <p style="margin-top:26px;text-align:center">
+      <button class="btn btn-outline" type="button" id="intelMore" hidden>Load more</button>
+    </p>
+  </section>
+
+  <section class="intel-sec" id="global" hidden>
+    <div class="intel-sec-head">
+      <h2>Global healthcare intelligence</h2>
+      <p>International regulators, research bodies and publications.</p>
+      <span class="intel-count" id="globalCount"></span>
+    </div>
+    <div class="intel-grid" id="globalHost"></div>
+  </section>
+
+  <section class="intel-sec" id="research">
+    <div class="intel-sec-head">
+      <h2>Research &amp; insights</h2>
+      <p>Studies, trials and deeper analysis.</p>
+    </div>
+    <div class="intel-research">
+      <div class="intel-grid" id="researchHost"></div>
+      <p id="researchEmpty" hidden style="margin:0;color:var(--muted);font-size:14px">
+        No research items have been published yet.
+      </p>
+    </div>
+  </section>
+
+  <!-- Shown when the pipeline has produced nothing. It states why, rather than
+       filling the page with placeholder stories. -->
+  <section class="intel-sec" id="bootEmpty" hidden>
+    <div class="intel-empty">
+      <h3>No intelligence has been published yet</h3>
+      <p>Doctorna Intelligence publishes only what a real source has actually reported. Run the
+         pipeline to collect from the configured sources:</p>
+      <p style="margin-top:14px"><code>node tools/intel-cli.mjs cycle</code></p>
+      <p style="margin-top:14px" id="bootEmptyNote"></p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="intel-foot">
+  <div class="intel-wrap" style="padding-bottom:0">
+    <p style="margin:0">Doctorna Intelligence links to reporting published by its original source.
+      Headlines and summaries are the publishers' own words, shown with attribution.
+      <a href="/">Return to the healthcare directory</a>.</p>
+  </div>
+</footer>
+
+<script type="module" src="/intelligence/js/intel.js"></script>
+</body>
+</html>

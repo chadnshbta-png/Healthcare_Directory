@@ -74,3 +74,9 @@ screenshots/
 specialities-unmatched-review.json
 specialities-collapsed-review.json
 specialities-proposed-relationships.json
+
+# Doctorna Intelligence content store (regenerate with tools/intel-cli.mjs).
+# Root-anchored: an unanchored intel/ also matches tools/intel/, which is
+# the pipeline SOURCE and must stay in version control.
+/intel/
+

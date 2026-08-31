@@ -25,7 +25,7 @@
 import { loadDirectory, loadSyncStatus, db, DataLoadError } from './data.js';
 import {
   state, MULTI, readUrl, writeUrl, clearAll, isFiltered,
-  loadSaved, persistSaved,
+  loadSaved, persistSaved, MODE_VIEW,
 } from './state.js';
 import { primeSearchIndex, runQuery, sortMatches, facilityResults } from './query.js';
 import { initFilters, refreshFilters, resetFilterUi, openGroup, GROUPS } from './filters.js';
@@ -35,6 +35,7 @@ import {
   renderFacilityFeature, renderSpecialtyExplorer, renderSeoColumns, renderFaq,
 } from './render.js';
 import { initDetail, renderRoute } from './detail.js';
+import { initAutocomplete } from './autocomplete.js';
 import { $, $$, debounce, scrollToEl } from './utils.js';
 
 /**
@@ -116,13 +117,159 @@ function refreshPanelOnly() {
 const updateSoon = debounce(update, 130);
 
 /* ═══ search ════════════════════════════════════════════════ */
+/**
+ * Apply a search mode. The mode changes the QUERY (see js/query.js), and for
+ * the two scoped modes it also decides which result view is meaningful — you
+ * cannot ask for facilities and be shown professionals.
+ */
+/**
+ * Drop filters that have no meaning in the destination mode.
+ *
+ * A facility Category ("Hospital") is not a professional Category, and a
+ * Licence type is not a facility field — carrying either across would apply a
+ * filter the visitor never asked for in that domain. Only filters with the
+ * SAME semantics on both sides survive: the specialty (a service on the
+ * facility side, a specialty on the professional side) and the facility itself.
+ */
+function clearIncompatibleFilters(mode) {
+  if (mode === 'professionals') {
+    // Facility TYPE is a facility-side classification.
+    state.facilityTypes = new Set();
+  } else if (mode === 'facilities') {
+    // Everything that describes a person rather than a place.
+    state.categories = new Set();
+    state.licences = new Set();
+    state.languages = new Set();
+    state.nationalities = new Set();
+    state.toggles = new Set();
+  }
+}
+
+function applySearchMode(mode, { rerun = true, keepFilters = false } = {}) {
+  if (!(mode in { all: 1, facilities: 1, professionals: 1 })) return;
+  if (!keepFilters && mode !== state.searchMode) clearIncompatibleFilters(mode);
+  state.searchMode = mode;
+  if (MODE_VIEW[mode]) state.view = MODE_VIEW[mode];
+  state.page = 1;
+  state.facilityPage = 1;
+  syncSearchMode();
+  syncViewButtons();
+  if (rerun) update();
+}
+
+/** Is the top Advanced Filters row revealed? */
+let topAdvancedOpen = false;
+
+/** Reflect the active mode on the selector buttons. */
+function syncSearchMode() {
+  for (const b of $$('[data-smode]')) {
+    const on = b.dataset.smode === state.searchMode;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  // The Doctors / Facilities cards are GLOBAL NAVIGATION and are never
+  // disabled: whatever query or filter is active, the visitor can always cross
+  // to the other directory. They are never gated on the current result list.
+  for (const b of $$('[data-view]')) {
+    b.disabled = false;
+    b.removeAttribute('title');
+  }
+  syncTopFilters();
+}
+
+/**
+ * Which TOP filter row is on screen, and what it is populated with.
+ *
+ * The lower filter rail is untouched by any of this — it keeps its own groups,
+ * its own ordering and its own behaviour. This is only the search card.
+ */
+function syncTopFilters() {
+  const mode = state.searchMode;
+  for (const row of $$('[data-sfilters]')) {
+    const owner = row.dataset.sfilters;
+    row.hidden = owner === 'professionals-advanced'
+      ? !(mode === 'professionals' && topAdvancedOpen)
+      : owner !== mode;
+  }
+  const adv = $('#topAdvanced');
+  if (adv) {
+    adv.setAttribute('aria-expanded', String(topAdvancedOpen));
+    // Filters chosen behind the fold still narrow the results, so the count
+    // stays visible when the row is collapsed.
+    const n = state.languages.size + state.facilities.size + state.nationalities.size;
+    const badge = $('#topAdvancedCount');
+    if (badge) { badge.hidden = n === 0; badge.textContent = String(n); }
+  }
+  // Area, Gender and Add-Ons have no backing field anywhere in the dataset, so
+  // they are simply not offered. No explanatory copy in the UI.
+  syncHeroSelects();
+}
+
 function wireSearch() {
   const input = $('#heroSearch');
   const clear = $('#heroSearchClear');
 
+  // ── search mode ───────────────────────────────────────────
+  const modeRow = document.querySelector('.smode');
+  if (modeRow) {
+    modeRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-smode]');
+      if (!btn || btn.dataset.smode === state.searchMode) return;
+      applySearchMode(btn.dataset.smode);
+      if (state.q) scrollToEl($('#directory'));
+    });
+    // Left/Right arrows move between modes, as a radiogroup should.
+    modeRow.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const btns = [...modeRow.querySelectorAll('[data-smode]')];
+      const i = btns.findIndex((b) => b.dataset.smode === state.searchMode);
+      const next = btns[(i + (e.key === 'ArrowRight' ? 1 : -1) + btns.length) % btns.length];
+      e.preventDefault();
+      applySearchMode(next.dataset.smode);
+      next.focus();
+    });
+  }
+
+  // ── autocomplete ──────────────────────────────────────────
+  const acList = $('#acList');
+  if (acList) {
+    initAutocomplete({
+      input,
+      list: acList,
+      getMode: () => state.searchMode,
+      onPick: (s) => {
+        // A specialty suggestion is a FILTER, not a text query — picking it
+        // does what clicking that specialty in the rail would do.
+        if (s.kind === 'category') {
+          input.value = '';
+          state.q = '';
+          state.categories = new Set([s.value]);
+        } else if (s.kind === 'specialty') {
+          input.value = '';
+          state.q = '';
+          state.specialties = new Set([s.value]);
+          if (state.searchMode === 'facilities') applySearchMode('all', { rerun: false });
+        } else {
+          input.value = s.value;
+          state.q = s.value;
+          if (s.kind === 'facility' && state.searchMode === 'professionals') {
+            applySearchMode('all', { rerun: false });
+          }
+        }
+        clear.hidden = !input.value;
+        state.page = 1;
+        state.facilityPage = 1;
+        syncHeroSelects();
+        update();
+        scrollToEl($('#directory'));
+      },
+    });
+  }
+
   input.addEventListener('input', () => {
     state.q = input.value;
     state.page = 1;
+    state.facilityPage = 1;
     clear.hidden = !input.value;
     updateSoon();
   });
@@ -135,22 +282,63 @@ function wireSearch() {
     update();
   });
 
-  // The selects are shortcuts into the same facets the rail drives.
-  $('#heroCategory').addEventListener('change', (e) => {
-    state.categories = e.target.value ? new Set([e.target.value]) : new Set();
-    state.page = 1;
-    update();
-  });
-  $('#heroSpecialty').addEventListener('change', (e) => {
-    state.specialties = e.target.value ? new Set([e.target.value]) : new Set();
-    state.page = 1;
-    update();
-  });
-  $('#heroFacilityType').addEventListener('change', (e) => {
-    state.facilityTypes = e.target.value ? new Set([e.target.value]) : new Set();
-    state.page = 1;
-    update();
-  });
+  // The selects are shortcuts into the same facets the rail drives. ALL mode
+  // no longer offers any — one box searching every domain cannot carry a filter
+  // that means the same thing in all of them — so these are bound only if the
+  // markup still has them. The state keys and the rail are untouched.
+  const bindHero = (sel, stateKey) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener('change', (e) => {
+      state[stateKey] = e.target.value ? new Set([e.target.value]) : new Set();
+      state.page = 1;
+      update();
+    });
+  };
+  bindHero('#heroCategory', 'categories');
+  bindHero('#heroSpecialty', 'specialties');
+  bindHero('#heroFacilityType', 'facilityTypes');
+
+  // ── mode-specific top filters ─────────────────────────────
+  // Each select writes to the SAME state key the lower rail uses, so the two
+  // stay in agreement and the query engine keeps one source of truth.
+  const bindSelect = (sel, stateKey) => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener('change', (e) => {
+      state[stateKey] = e.target.value ? new Set([e.target.value]) : new Set();
+      state.page = 1;
+      state.facilityPage = 1;
+      syncHeroSelects();
+      update();
+    });
+  };
+  bindSelect('#facCategory', 'facilityTypes');
+  bindSelect('#facSpecialities', 'specialties');
+  bindSelect('#proLicence', 'licences');
+  bindSelect('#proCategory', 'categories');
+  bindSelect('#proSpecialty', 'specialties');
+  bindSelect('#proLanguage', 'languages');
+  bindSelect('#proFacility', 'facilities');
+  bindSelect('#proNationality', 'nationalities');
+
+  const proSort = $('#proSort');
+  if (proSort) {
+    proSort.addEventListener('change', (e) => {
+      state.sort = e.target.value;
+      $('#sortSelect').value = e.target.value;
+      state.page = 1;
+      update();
+    });
+  }
+
+  const topAdv = $('#topAdvanced');
+  if (topAdv) {
+    topAdv.addEventListener('click', () => {
+      topAdvancedOpen = !topAdvancedOpen;
+      syncTopFilters();
+    });
+  }
 
   $('#heroSearchForm').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -182,6 +370,18 @@ function syncHeroSelects() {
   pick('#heroCategory', state.categories);
   pick('#heroSpecialty', state.specialties);
   pick('#heroFacilityType', state.facilityTypes);
+  // FACILITIES row
+  pick('#facCategory', state.facilityTypes);
+  pick('#facSpecialities', state.specialties);
+  // PROFESSIONALS row
+  pick('#proLicence', state.licences);
+  pick('#proCategory', state.categories);
+  pick('#proSpecialty', state.specialties);
+  pick('#proLanguage', state.languages);
+  pick('#proFacility', state.facilities);
+  pick('#proNationality', state.nationalities);
+  const sortEl = $('#proSort');
+  if (sortEl) sortEl.value = state.sort;
 }
 
 /* ═══ view switch, sort, layout, pagination ═════════════════ */
@@ -205,11 +405,25 @@ function syncLayoutButtons() {
   });
 }
 
+/**
+ * The Doctors / Facilities cards.
+ *
+ * They are the directory's domain switch, so clicking one also moves the search
+ * into the matching mode — Doctors -> PROFESSIONALS, Facilities -> FACILITIES —
+ * which is what makes the top filters change with them. The global totals on
+ * the cards are never recomputed from the result set.
+ */
 function setView(view) {
-  if (state.view === view) return;
+  const mode = view === 'facilities' ? 'facilities' : 'professionals';
+  if (state.view === view && state.searchMode === mode) return;
+  clearIncompatibleFilters(mode);
+  state.searchMode = mode;
   state.view = view;
   state.page = 1;
+  state.facilityPage = 1;
+  syncSearchMode();
   syncViewButtons();
+  syncHeroSelects();
   update();
 }
 
@@ -320,6 +534,10 @@ function wireRouting() {
     }
     history.pushState(null, '', location.pathname + location.search);
     applyRoute();
+  }, () => {
+    // Facility-list paging is shareable: ?fp=<n> alongside the #/facility/<id>
+    // hash, written without a navigation so the overlay is not re-rendered.
+    writeUrl();
   });
   window.addEventListener('hashchange', applyRoute);
   window.addEventListener('popstate', applyRoute);
@@ -608,6 +826,7 @@ function initState() {
   $('#heroSearch').value = state.q;
   $('#heroSearchClear').hidden = !state.q;
   $('#sortSelect').value = state.sort;
+  syncSearchMode();
   syncViewButtons();
   syncLayoutButtons();
 }

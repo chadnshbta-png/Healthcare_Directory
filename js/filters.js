@@ -17,21 +17,24 @@ const SEARCH_ICO = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" c
  * searchable ones. `open` controls the initial disclosure state.
  */
 const GROUPS = [
-  { key: 'cat', stateKey: 'categories', title: 'Professional category', dict: 'category', style: 'chips', open: true },
-  { key: 'spec', stateKey: 'specialties', title: 'Specialty', dict: 'specialty', style: 'list', open: true, searchable: true, initial: 8, labelFn: specialtyLabel },
+  { key: 'cat', stateKey: 'categories', title: 'Professional category', dict: 'category', style: 'chips', open: true, modes: ['all', 'professionals'] },
+  // Specialty is meaningful in BOTH modes: for professionals it is their own
+  // specialty, for facilities it is the services practised there by the staff
+  // the register links to them.
+  { key: 'spec', stateKey: 'specialties', title: 'Specialty', dict: 'specialty', style: 'list', open: true, searchable: true, initial: 8, labelFn: specialtyLabel, modes: ['all', 'facilities', 'professionals'], titleByMode: { facilities: 'Services practised' } },
   {
     key: 'ftype', stateKey: 'facilityTypes', title: 'Facility type', dict: 'facilityType',
-    style: 'chips', open: true, labelFn: facilityTypeLabel,
+    style: 'chips', open: true, labelFn: facilityTypeLabel, modes: ['all', 'facilities'],
     // The one facet not taken from a published field. Saying so is the
     // difference between a filter and a claim.
     note: 'The register publishes no facility type. Each one is classified from the '
       + 'registered facility name and, where the name says nothing, from the specialties '
       + 'of the professionals licensed there.',
   },
-  { key: 'fac', stateKey: 'facilities', title: 'Facility', dict: 'facility', style: 'list', open: true, searchable: true, initial: 6 },
-  { key: 'lang', stateKey: 'languages', title: 'Language', dict: 'language', style: 'list', open: false, searchable: true, initial: 8 },
-  { key: 'nat', stateKey: 'nationalities', title: 'Nationality', dict: 'nationality', style: 'list', open: false, searchable: true, initial: 8 },
-  { key: 'lic', stateKey: 'licences', title: 'Licence type', dict: 'licenseType', style: 'chips', open: false, labelMap: LICENCE_LABEL },
+  { key: 'fac', stateKey: 'facilities', title: 'Facility', dict: 'facility', style: 'list', open: true, searchable: true, initial: 6, modes: ['all', 'facilities', 'professionals'] },
+  { key: 'lang', stateKey: 'languages', title: 'Language', dict: 'language', style: 'list', open: false, searchable: true, initial: 8, modes: ['all', 'professionals'] },
+  { key: 'nat', stateKey: 'nationalities', title: 'Nationality', dict: 'nationality', style: 'list', open: false, searchable: true, initial: 8, modes: ['all', 'professionals'] },
+  { key: 'lic', stateKey: 'licences', title: 'Licence type', dict: 'licenseType', style: 'chips', open: false, labelMap: LICENCE_LABEL, modes: ['all', 'professionals'] },
 ];
 
 /** Per-group UI memory (option search text + expanded state). */
@@ -40,7 +43,7 @@ let onChange = () => {};
 
 export function initFilters(handler) {
   onChange = handler;
-  $('#filterScroll').innerHTML = GROUPS.map(groupShell).join('') + flagsShell();
+  $('#filterScroll').innerHTML = GROUPS.map(groupShell).join('') + flagsShell() + advancedShell();
 
   const scroll = $('#filterScroll');
   scroll.addEventListener('click', handleClick);
@@ -135,8 +138,96 @@ const optionRow = (g, o, selected) => `
  * `matches` is the current result set, reused for the profile-data counts so
  * they cost one extra pass rather than four.
  */
+/** Is this filter group meaningful in the active search mode? */
+const inMode = (g) => !g.modes || g.modes.includes(state.searchMode);
+
+/**
+ * Filter order per mode, and which groups sit behind "Advanced filters".
+ *
+ * PROFESSIONALS leads with the four a visitor reaches for first (sort lives in
+ * the results toolbar, then licence, category, specialty) and folds the rest
+ * away — the list is long enough that showing all of it buries the common case.
+ * FACILITIES has only three applicable groups, so nothing is hidden.
+ *
+ * Area, Gender and Add-Ons are deliberately absent: no field in the dataset
+ * backs them (see README ▸ facility schema), and offering a filter that cannot
+ * filter is worse than not offering it.
+ */
+const MODE_ORDER = {
+  professionals: { lic: 1, cat: 2, spec: 3, lang: 5, fac: 6, nat: 7, flags: 8 },
+  facilities: { ftype: 1, spec: 2, fac: 3 },
+};
+const ADVANCED = { professionals: new Set(['lang', 'fac', 'nat', 'flags']) };
+
+/** Are the extra professional filters currently revealed? */
+let advancedOpen = false;
+
+/** The disclosure that reveals the remaining professional filters. */
+function advancedShell() {
+  return `<section class="fgroup fadv" data-group="__advanced" hidden>
+    <button class="fadv-toggle" type="button" id="advancedFilters" aria-expanded="false"
+            aria-controls="filterScroll">
+      <span class="fadv-label">Advanced filters</span>
+      <span class="fadv-count" data-advanced-count hidden>0</span>
+      ${CARET}
+    </button>
+  </section>`;
+}
+
 export function refreshFilters(matches) {
+  // Groups that do not describe the thing being searched are hidden, not just
+  // ignored: showing "Nationality" while searching facilities invites a filter
+  // that cannot narrow a facility.
+  const mode = state.searchMode;
+  const order = MODE_ORDER[mode] ?? null;
+  const advSet = ADVANCED[mode] ?? null;
+
+  const place = (section, key) => {
+    if (!section) return;
+    section.style.order = order ? String(order[key] ?? 99) : '';
+    // An advanced group is hidden only because it is folded away, so its
+    // selections survive — collapsing never clears a filter.
+    if (advSet && advSet.has(key) && !advancedOpen) section.hidden = true;
+  };
+
   for (const g of GROUPS) {
+    const section = document.querySelector(`.fgroup[data-group="${g.key}"]`);
+    if (section) {
+      section.hidden = !inMode(g);
+      const t = section.querySelector('.fgroup-title');
+      if (t) t.textContent = (g.titleByMode && g.titleByMode[mode]) || g.title;
+      if (inMode(g)) place(section, g.key);
+    }
+  }
+  // The profile-data switches describe a professional record.
+  const flagsSection = document.querySelector('.fgroup[data-group="flags"]');
+  if (flagsSection) {
+    flagsSection.hidden = mode === 'facilities';
+    if (mode !== 'facilities') place(flagsSection, 'flags');
+  }
+
+  // The disclosure itself: only where there is something to disclose.
+  const adv = document.querySelector('.fgroup[data-group="__advanced"]');
+  if (adv) {
+    adv.hidden = !advSet;
+    adv.style.order = '4';
+    const btn = adv.querySelector('.fadv-toggle');
+    btn.setAttribute('aria-expanded', String(advancedOpen));
+    adv.dataset.open = String(advancedOpen);
+    // How many filters are active behind the fold, so folding never hides that
+    // something is narrowing the results.
+    if (advSet) {
+      let n = 0;
+      for (const g of GROUPS) if (advSet.has(g.key)) n += state[g.stateKey].size;
+      if (advSet.has('flags')) n += state.toggles.size;
+      const badge = adv.querySelector('[data-advanced-count]');
+      badge.hidden = n === 0;
+      badge.textContent = String(n);
+    }
+  }
+
+  for (const g of GROUPS) {
+    if (!inMode(g)) continue;
     const counts = facetCounts(g.key, matches);
     const selected = state[g.stateKey];
     const memory = ui.get(g.key);
@@ -254,6 +345,13 @@ function handleClick(e) {
   if (more) {
     const m = ui.get(more.dataset.more);
     m.expanded = !m.expanded;
+    onChange({ refreshOnly: true });
+    return;
+  }
+
+  const advBtn = e.target.closest('.fadv-toggle');
+  if (advBtn) {
+    advancedOpen = !advancedOpen;
     onChange({ refreshOnly: true });
     return;
   }
