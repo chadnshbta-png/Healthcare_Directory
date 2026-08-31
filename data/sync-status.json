@@ -1,28 +1,31 @@
 {
-  "lastSuccessfulSyncAt": "2026-08-26T11:06:17.423Z",
-  "schemaVersion": 3,
+  "lastSuccessfulSyncAt": "2026-08-30T15:49:15.756Z",
+  "schemaVersion": 6,
   "licenceTypeSource": "doctor_licence_type",
   "totals": {
-    "doctors": 102424,
+    "doctors": 103056,
     "facilities": 5652,
-    "facilitiesWithDoctors": 5579,
-    "doctorFacilityLinks": 158607,
-    "specialties": 441,
+    "facilitiesWithDoctors": 5573,
+    "doctorFacilityLinks": 158363,
+    "specialties": 442,
     "categories": 5,
     "nationalities": 167,
     "languages": 74,
-    "doctorsWithContact": 22395,
-    "facilityTypes": 23
+    "doctorsWithContact": 22043,
+    "facilityTypes": 24,
+    "doctorPrimaryFacilityLinks": 70395,
+    "doctorLicensedFacilityLinks": 76448
   },
   "exclusions": {
-    "doctorsWithNoFacility": 30413,
-    "facilitiesWithNoType": 0
+    "doctorsWithNoFacility": 31212,
+    "facilitiesWithNoType": 2,
+    "removedProfessionals": 1983
   },
   "relationships": null,
   "reconciliation": {
     "ok": true,
     "failures": 0,
-    "notes": 9
+    "notes": 18
   },
   "rollbackAvailable": true
 }
