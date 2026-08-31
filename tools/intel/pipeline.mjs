@@ -157,9 +157,10 @@ export async function runSource(db, source, { dataDir, directory, ai, dryRun = f
         db.prepare('update Article set lastCheckedAt=? where id=?').run(startedAt, dup.of);
         const prev = db.prepare('select contentHash, status from Article where id=?').get(dup.of);
         if (prev && prev.contentHash !== cand.contentHash) {
-          db.prepare(`update Article set excerpt=?, contentHash=?, updatedAt=?,
-            processingStatus=? where id=?`)
-            .run(item.excerpt ?? null, cand.contentHash, startedAt, 'UPDATED', dup.of);
+          db.prepare(`update Article set excerpt=?, content=?, image=coalesce(?, image),
+            contentHash=?, updatedAt=?, processingStatus=? where id=?`)
+            .run(item.excerpt ?? null, item.contentHtml ?? null, item.image ?? null,
+              cand.contentHash, startedAt, 'UPDATED', dup.of);
           stats.updated++;
         }
       }
@@ -214,7 +215,7 @@ export async function runSource(db, source, { dataDir, directory, ai, dryRun = f
         lastCheckedAt, lastProcessedAt, region, retryCount
       ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`)
         .run(id, slug, source.id, source.name, item.link, canonicalUrl, item.title,
-          cand.normalizedTitle, item.excerpt ?? null, finalSummary, analysis, null,
+          cand.normalizedTitle, item.excerpt ?? null, finalSummary, analysis, item.contentHtml ?? null,
           item.image ?? null, item.author ?? null, category, contentType, JSON.stringify(tags),
           item.publishedAt, startedAt, startedAt, cand.sourceHash, cand.contentHash, cand.simHash,
           dup?.storyId ?? id, dup && !dup.hard ? dup.of : null,

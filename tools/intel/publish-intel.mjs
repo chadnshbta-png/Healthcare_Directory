@@ -16,10 +16,28 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STATUS, CATEGORY_LABEL, CONTENT_TYPE_LABEL } from './store.mjs';
+import { usableImage } from './rss.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..', '..');
 const PAGE_SIZE = 12;
+
+/** Plain text of some HTML, for counting words. */
+const textOf = (html) => String(html ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Reading time from the words we ACTUALLY hold — body if the publisher
+ * syndicated one, otherwise the summary. At 225 wpm (the middle of the usual
+ * 200–250 range), rounded up, never below one minute. Null when there is not
+ * enough text to time honestly, so the UI can omit it rather than print
+ * "1 min read" over two sentences.
+ */
+function readingTime(article) {
+  const words = textOf(article.content || article.summary || article.excerpt || '')
+    .split(/\s+/).filter(Boolean).length;
+  if (words < 40) return null;
+  return { minutes: Math.max(1, Math.round(words / 225)), words };
+}
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -38,6 +56,12 @@ function toPublic(db, r) {
   const group = (t) => ents.filter((e) => e.entityType === t)
     .map((e) => ({ id: e.entityId, label: e.entityLabel, method: e.method,
       confidence: Number(e.confidence.toFixed(2)) }));
+  const base = {
+    content: r.content,
+    summary: r.summary,
+    excerpt: r.excerpt,
+  };
+  const rt = readingTime(base);
   return {
     id: r.id,
     slug: r.slug,
@@ -45,6 +69,12 @@ function toPublic(db, r) {
     excerpt: r.excerpt,
     summary: r.summary,
     analysis: r.analysis,
+    // The publisher's own body, sanitised at ingest. Null when they syndicated
+    // only a teaser — in which case the page says so and links out.
+    content: r.content,
+    hasFullContent: Boolean(r.content),
+    readingMinutes: rt?.minutes ?? null,
+    wordCount: rt?.words ?? null,
     category: r.category,
     categoryLabel: CATEGORY_LABEL[r.category] ?? r.category,
     contentType: r.contentType,
@@ -53,7 +83,12 @@ function toPublic(db, r) {
     sourceUrl: r.sourceUrl,
     canonicalUrl: r.canonicalUrl,
     author: r.author,
-    image: r.image,
+    // The stored value is whatever the feed said; what we PUBLISH is only an
+    // image that is actually a picture of the story. Sprites, tracking pixels
+    // and the publisher's shared "no image" placeholder are filtered here as
+    // well as at ingest, so a corpus collected before the ingest fix is
+    // corrected without rewriting a single stored row.
+    image: usableImage(r.image),
     tags: JSON.parse(r.tags ?? '[]'),
     originalPublishedAt: iso(r.originalPublishedAt),
     retrievedAt: iso(r.retrievedAt),
@@ -146,9 +181,18 @@ ${a.image ? `<meta name="twitter:image" content="${esc(a.image)}">` : ''}
     <div class="intel-kicker">
       <span class="intel-cat">${esc(a.categoryLabel)}</span>
       <span class="intel-type intel-type-${esc(a.contentType)}">${esc(a.contentTypeLabel)}</span>
+      ${a.originalPublishedAt ? `<time class="intel-metabit" datetime="${esc(a.originalPublishedAt)}">${esc(human(Date.parse(a.originalPublishedAt)))}</time>` : ''}
+      ${a.readingMinutes ? `<span class="intel-metabit">${a.readingMinutes} min read</span>` : ''}
+      <span class="intel-metabit" data-views hidden></span>
     </div>
     <h1>${esc(a.title)}</h1>
     ${a.summary ? `<p class="intel-lede">${esc(a.summary)}</p>` : ''}
+    ${a.image ? `<figure class="intel-figure"><img src="${esc(a.image)}" alt="" loading="lazy" decoding="async"
+      onerror="this.parentElement.remove()"></figure>` : ''}
+    ${a.content
+      ? `<div class="intel-body-copy">${a.content}</div>`
+      : `<p class="intel-teaser-note">${esc(a.sourceName)} syndicates a summary rather than the
+           full article text for this item, so the whole story is on their site.</p>`}
     <div class="intel-source" role="note">
       <div class="intel-source-row"><span>Source</span>
         <a href="${esc(a.sourceUrl)}" rel="noopener nofollow" target="_blank">${esc(a.sourceName)}</a></div>
@@ -158,10 +202,11 @@ ${a.image ? `<meta name="twitter:image" content="${esc(a.image)}">` : ''}
     </div>
     ${a.contentType === 'medical' ? `<p class="intel-medical-note">Clinical content. Summarised from the source and reviewed before publication. It is not medical advice — consult a licensed professional.</p>` : ''}
     <p class="intel-readmore">
-      <a class="btn btn-primary" href="${esc(a.sourceUrl)}" rel="noopener nofollow" target="_blank">Read the full article at ${esc(a.sourceName)}</a>
+      <a class="btn btn-primary" href="${esc(a.sourceUrl)}" rel="noopener nofollow" target="_blank">${a.content ? 'View the original at' : 'Read the full article at'} ${esc(a.sourceName)}</a>
     </p>
-    <p class="intel-attrib">Doctorna Intelligence links to reporting published by its original source. The
-      headline and summary above are the publisher's own words, shown here with attribution.</p>
+    <p class="intel-attrib">Doctorna Intelligence ${a.content
+      ? 'reproduces the text its publisher syndicates in their own public feed, with attribution and a link to the original.'
+      : 'links to reporting published by its original source. The headline and summary above are the publisher\'s own words, shown here with attribution.'}</p>
   </article>
   <aside class="intel-related" id="intelRelated" data-slug="${esc(a.slug)}"></aside>
 </main>
@@ -220,6 +265,7 @@ export function publishIntel(db, { siteBase = '', outDir = resolve(ROOT, 'intell
     slug: a.slug, title: a.title, summary: a.summary, category: a.category,
     categoryLabel: a.categoryLabel, contentType: a.contentType, contentTypeLabel: a.contentTypeLabel,
     sourceName: a.sourceName, sourceUrl: a.sourceUrl, image: a.image, region: a.region,
+    readingMinutes: a.readingMinutes, hasFullContent: a.hasFullContent,
     originalPublishedAt: a.originalPublishedAt, retrievedAt: a.retrievedAt,
     specialtyIds: a.specialtyIds, facilityIds: a.facilityIds, doctorIds: a.doctorIds,
     related: { specialties: a.related.specialties.slice(0, 3), facilities: a.related.facilities.slice(0, 2) },
@@ -235,6 +281,21 @@ export function publishIntel(db, { siteBase = '', outDir = resolve(ROOT, 'intell
       items: articles.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE).map(card),
     }));
   }
+
+  // ── hero figures, all derived from the store ────────────────────────────
+  // "Analysed" counts every item the pipeline has actually classified, which
+  // is the published set plus the items still held in review. Nothing here is
+  // a marketing number; each one is a count of rows.
+  const assessed = db.prepare(`select count(*) n from Article where status in (?,?,?)`)
+    .get(STATUS.PUBLISHED, STATUS.EDITORIAL_REVIEW, STATUS.MEDICAL_REVIEW).n;
+  const sourceCount = new Set(articles.map((a) => a.sourceName)).size;
+  const liveRows = db.prepare('select scheduleMinutes from Source where enabled = 1 and requiresConfig = 0').all();
+  const liveSources = liveRows.length;
+  const everyMin = liveRows.length ? Math.min(...liveRows.map((r) => r.scheduleMinutes)) : 0;
+  const cadence = everyMin === 0 ? null
+    : everyMin % 60 === 0
+      ? `Checked every ${everyMin / 60} hour${everyMin === 60 ? '' : 's'}`
+      : `Checked every ${everyMin} minutes`;
 
   const byCategory = {};
   for (const a of articles) byCategory[a.category] = (byCategory[a.category] ?? 0) + 1;
@@ -260,12 +321,20 @@ export function publishIntel(db, { siteBase = '', outDir = resolve(ROOT, 'intell
     // articles there are no signals, and the section stays absent rather than
     // being filled with invented statistics.
     signals: articles.length === 0 ? [] : [
-      { key: 'uae', label: 'UAE healthcare items', value: uae.length },
-      { key: 'articles', label: 'Published items', value: articles.length },
-      { key: 'sources', label: 'Contributing sources', value: new Set(articles.map((a) => a.sourceName)).size },
-      { key: 'linked', label: 'Items linked to directory entities',
-        value: articles.filter((a) => a.specialtyIds.length || a.facilityIds.length || a.doctorIds.length).length },
+      { key: 'analysed', label: 'Items analysed', value: assessed,
+        note: `Every item the pipeline has classified: ${articles.length} published, `
+          + `${assessed - articles.length} held in editorial or medical review.` },
+      { key: 'articles', label: 'Published articles', value: articles.length,
+        note: 'Items that cleared review and are readable on this page.' },
+      { key: 'uae', label: 'UAE healthcare items', value: uae.length,
+        note: 'Published items classified as UAE-region by tools/intel/classify.mjs.' },
+      { key: 'sources', label: 'Contributing sources', value: sourceCount,
+        note: `${sourceCount} of ${liveSources} live sources have published items so far.` },
     ],
+    // Real cadence: the shortest polling interval among sources that are live.
+    // Stated in the hero instead of a marketing claim about freshness.
+    cadence,
+    linkedCount: articles.filter((a) => a.specialtyIds.length || a.facilityIds.length || a.doctorIds.length).length,
   }));
 
   // Operational status — the admin/editor view, from the same store.
@@ -285,6 +354,37 @@ export function publishIntel(db, { siteBase = '', outDir = resolve(ROOT, 'intell
     })),
     recentRuns: db.prepare(`select * from FetchRun order by startedAt desc limit 20`).all()
       .map((r) => ({ ...r, startedAt: iso(r.startedAt), finishedAt: iso(r.finishedAt) })),
+  }));
+
+  /**
+   * View counts, snapshotted from the store. This file only ever contains
+   * counts a real counter recorded (tools/intel/view-endpoint.mjs); when the
+   * counter has never run it is an empty object and the UI shows no view
+   * figure at all, rather than a zero or an invented number.
+   */
+  const viewRows = db.prepare('select articleSlug, views from ArticleView').all();
+  writeFileSync(resolve(dataDir, 'views.json'), JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    counted: viewRows.length,
+    views: Object.fromEntries(viewRows.map((v) => [v.articleSlug, v.views])),
+  }));
+
+  /**
+   * Runtime configuration for the page.
+   *
+   * `viewEndpoint` is the BASE URL of a running view counter — the client
+   * appends `/api/intel/view` (POST, to register a read) and `/api/intel/views`
+   * (GET, for the whole map). tools/intel/view-endpoint.mjs implements exactly
+   * those two routes; set DOCTORNA_VIEW_ENDPOINT to where it listens, e.g.
+   * `DOCTORNA_VIEW_ENDPOINT=http://127.0.0.1:8753`.
+   *
+   * Null until a counter is actually deployed. The client treats null as "no
+   * view tracking": it falls back to the read-only views.json snapshot and, with
+   * nothing there either, shows no figure at all rather than a zero.
+   */
+  writeFileSync(resolve(dataDir, 'config.json'), JSON.stringify({
+    viewEndpoint: process.env.DOCTORNA_VIEW_ENDPOINT ?? null,
+    generatedAt: new Date().toISOString(),
   }));
 
   // Sitemap for the section only; the directory's own URLs are untouched.

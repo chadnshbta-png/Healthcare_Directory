@@ -44,6 +44,51 @@ $('#intelFooter').outerHTML = `
   </div>
 </footer>`;
 
+/**
+ * View count.
+ *
+ * A static page cannot count anything shared, and localStorage counts one
+ * browser rather than the world — presenting either as a view count would be a
+ * fabricated statistic. So the figure comes from one of two real places, in
+ * order, and from nowhere else:
+ *
+ *   1. the live counter, when config.json names one (tools/intel/view-endpoint.mjs).
+ *      Reading the article registers the view and the server returns the total.
+ *   2. views.json, the snapshot taken of that counter when the archive was
+ *      published. Read-only: it can display a count, never increment one.
+ *
+ * With neither available the element stays hidden. No zero, no estimate.
+ */
+async function showViews(slug) {
+  const el = $('.intel-kicker [data-views]');
+  if (!el || !slug) return;
+  let cfg = {};
+  try { cfg = await (await fetch(`${DATA}/config.json`, { cache: 'no-cache' })).json(); } catch { /* optional */ }
+  const base = String(cfg.viewEndpoint ?? '').replace(/\/+$/, '');
+
+  const paint = (n) => {
+    if (!Number.isFinite(n) || n <= 0) return false;
+    el.textContent = `${Number(n).toLocaleString('en-GB')} view${n === 1 ? '' : 's'}`;
+    el.hidden = false;
+    return true;
+  };
+
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/intel/view`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug }),
+      });
+      if (res.ok && paint((await res.json()).views)) return;
+    } catch { /* fall through to the published snapshot */ }
+  }
+  try {
+    const snap = await (await fetch(`${DATA}/views.json`, { cache: 'no-cache' })).json();
+    if (snap?.counted > 0) paint(snap.views?.[slug]);
+  } catch { /* no counter has ever run */ }
+}
+
 const routes = {
   facility: (id) => `/#/facility/${encodeURIComponent(id)}`,
   doctor: (id) => `/#/doctor/${encodeURIComponent(id)}`,
@@ -70,8 +115,9 @@ const group = (title, note, items, hrefFor) => {
 
 async function boot() {
   const host = $('#intelRelated');
-  const slug = host?.dataset.slug;
-  if (!slug) return;
+  const slug = host?.dataset.slug ?? $('#article')?.dataset.article;
+  showViews(slug);
+  if (!host?.dataset.slug) return;
   let a;
   try {
     a = await (await fetch(`${DATA}/article-${slug}.json`, { cache: 'no-cache' })).json();

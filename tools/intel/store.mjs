@@ -169,6 +169,16 @@ create table if not exists FetchRun (
   error        text
 );
 create index if not exists idx_run_source on FetchRun(sourceId, startedAt);
+
+-- View counts. The store is the system of record; the published views.json is
+-- a snapshot of it. Counts only ever arrive from a real counter (see
+-- tools/intel/view-endpoint.mjs) — nothing here is ever generated.
+create table if not exists ArticleView (
+  articleSlug  text primary key,
+  views        integer not null default 0,
+  firstViewAt  integer,
+  lastViewAt   integer
+);
 `;
 
 /**

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Doctorna Intelligence — Healthcare news, research and insights</title>
+<title>Doctorna Intelligence — Healthcare Industry Insights</title>
 <meta name="description" content="Healthcare news, research and insights — connected to the healthcare professionals and facilities behind the industry. Every item carries its original source, publication date and retrieval date.">
 <link rel="canonical" href="/intelligence/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Doctorna Intelligence">
-<meta property="og:title" content="Doctorna Intelligence">
+<meta property="og:title" content="Doctorna Intelligence — Healthcare Industry Insights">
 <meta property="og:description" content="Healthcare news, research and insights — connected to the professionals and facilities behind the industry.">
 <meta property="og:url" content="/intelligence/">
 <meta name="twitter:card" content="summary">
@@ -41,118 +41,217 @@
   </div>
 </header>
 
-<main class="intel-wrap" id="main">
+<main id="main">
 
+  <!-- ── HERO ──────────────────────────────────────────────────────────────
+       Centred masthead on a light Doctorna-blue field. The decoration is two
+       soft radial washes and a thin arc drawn from the brand blue — enough to
+       give the band a shape of its own without competing with the headline.
+       The figures underneath are counts of rows in the store; the row stays
+       hidden until they load rather than showing invented numbers. -->
   <section class="intel-hero">
-    <p class="intel-eyebrow">Healthcare Intelligence</p>
-    <h1>Doctorna Intelligence</h1>
-    <p>Healthcare news, research and insights — connected to the healthcare professionals and
-       facilities behind the industry. Every item keeps its original source, publication date
-       and the date Doctorna retrieved it.</p>
+    <div class="intel-hero-art" aria-hidden="true">
+      <svg viewBox="0 0 1440 420" preserveAspectRatio="xMidYMid slice" focusable="false">
+        <defs>
+          <linearGradient id="dArc" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#2899E5" stop-opacity=".30"/>
+            <stop offset="100%" stop-color="#2899E5" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M-40 330 C 260 250 420 372 720 300 C 1020 228 1200 336 1480 262"
+              fill="none" stroke="url(#dArc)" stroke-width="1.5"/>
+        <path d="M-40 386 C 300 300 460 424 760 348 C 1060 272 1220 380 1480 306"
+              fill="none" stroke="url(#dArc)" stroke-width="1.5"/>
+        <circle cx="1216" cy="96" r="3" fill="#2899E5" opacity=".35"/>
+        <circle cx="232" cy="150" r="2.5" fill="#2899E5" opacity=".28"/>
+      </svg>
+    </div>
+
+    <div class="intel-hero-in">
+      <p class="intel-eyebrow">Doctorna Intelligence</p>
+      <h1>Healthcare Industry Insights</h1>
+      <p class="intel-hero-lede">Developments shaping healthcare in the UAE and beyond — regulation and
+         policy, research, technology, partnerships and the industry updates that move the field.
+         Every item keeps its original source, its publication date and the date we retrieved it.</p>
+
+      <dl class="intel-stats" id="heroStats" hidden></dl>
+      <p class="intel-hero-note" id="heroUpdated" hidden></p>
+    </div>
   </section>
 
-  <!-- Signals render only when the published dataset supports them. With no
-       articles the section stays absent rather than showing invented figures. -->
-  <section class="intel-sec" id="signals" hidden>
-    <div class="intel-sec-head">
-      <h2>Healthcare signals</h2>
-      <p>Derived from what has actually been published.</p>
-    </div>
-    <div class="intel-signals" id="signalGrid"></div>
-  </section>
+  <div class="intel-wrap">
 
-  <section class="intel-sec" id="featured">
-    <div class="intel-sec-head">
-      <h2>Featured intelligence</h2>
-      <span class="intel-count" id="featuredCount"></span>
-    </div>
-    <div id="featuredHost">
-      <div class="intel-skel" style="width:60%"></div>
-      <div class="intel-skel" style="width:85%"></div>
-      <div class="intel-skel" style="width:40%"></div>
-    </div>
-  </section>
+    <!-- ── FILTER PANEL ────────────────────────────────────────────────────
+         One panel, lifted onto the seam between the hero and the page. Every
+         control here narrows the SAME set and combines with the others; the
+         count line states what matched. -->
+    <section class="intel-panel" id="categories" aria-label="Filter insights">
+      <div class="intel-panel-grid">
+        <div class="intel-panel-cats">
+          <span class="intel-field-label" id="catRailLabel">Categories</span>
+          <div class="intel-cats-rail">
+            <button class="intel-rail-btn intel-rail-prev" type="button" hidden
+                    aria-label="Scroll categories left">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="intel-cats-scroll" id="catScroll">
+              <div class="intel-cats" id="catRail" role="group" aria-labelledby="catRailLabel"></div>
+            </div>
+            <button class="intel-rail-btn intel-rail-next" type="button" hidden
+                    aria-label="Scroll categories right">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
 
-  <section class="intel-sec" id="categories">
-    <div class="intel-sec-head">
-      <h2>Categories</h2>
-      <p>Filter the stream below.</p>
-    </div>
-    <div class="intel-cats" id="catRail" role="group" aria-label="Filter by category"></div>
-  </section>
+        <div class="intel-panel-field">
+          <label class="intel-field-label" for="intelDate">Date</label>
+          <div class="intel-select-wrap">
+            <svg class="intel-field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <select class="intel-select" id="intelDate">
+              <option value="">All time</option>
+              <option value="today">Today</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+            </select>
+          </div>
+        </div>
 
-  <!-- UAE leads. Global content is separated below, never hidden. -->
-  <section class="intel-sec" id="uae" hidden>
-    <div class="intel-sec-head">
-      <h2>UAE healthcare news</h2>
-      <p>From UAE health authorities and providers.</p>
-      <span class="intel-count" id="uaeCount"></span>
-    </div>
-    <div class="intel-grid" id="uaeHost"></div>
-  </section>
+        <div class="intel-panel-field">
+          <label class="intel-field-label" for="intelSort">Sort by</label>
+          <div class="intel-select-wrap">
+            <select class="intel-select" id="intelSort">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </div>
+        </div>
 
-  <section class="intel-sec" id="latest">
-    <div class="intel-sec-head">
-      <h2>All healthcare news</h2>
-      <span class="intel-count" id="latestCount"></span>
-    </div>
-    <div class="intel-tools">
-      <label class="intel-search">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <span class="sr-only">Search intelligence</span>
-        <input id="intelSearch" type="search" autocomplete="off" placeholder="Search headlines, sources or topics…">
-      </label>
-      <select class="intel-select" id="intelType" aria-label="Filter by content type">
-        <option value="">Any type</option>
-      </select>
-      <select class="intel-select" id="intelSource" aria-label="Filter by source">
-        <option value="">Any source</option>
-      </select>
-    </div>
-    <div class="intel-grid" id="streamHost"></div>
-    <div id="streamEmpty" hidden class="intel-empty">
-      <h3>Nothing matches those filters</h3>
-      <p>Try a different category, type or search term.</p>
-    </div>
-    <p style="margin-top:26px;text-align:center">
-      <button class="btn btn-outline" type="button" id="intelMore" hidden>Load more</button>
-    </p>
-  </section>
+        <div class="intel-panel-field intel-panel-search">
+          <label class="intel-field-label" for="intelSearch">Search</label>
+          <div class="intel-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <input id="intelSearch" type="search" autocomplete="off" placeholder="Search insights…">
+          </div>
+        </div>
+      </div>
 
-  <section class="intel-sec" id="global" hidden>
-    <div class="intel-sec-head">
-      <h2>Global healthcare intelligence</h2>
-      <p>International regulators, research bodies and publications.</p>
-      <span class="intel-count" id="globalCount"></span>
-    </div>
-    <div class="intel-grid" id="globalHost"></div>
-  </section>
+      <!-- Secondary dimensions. Type and source stay available and keep
+           combining with everything above; they sit behind a disclosure so the
+           panel leads with the three filters people reach for. -->
+      <div class="intel-more-filters" id="moreFilters" hidden>
+        <div class="intel-more-grid">
+          <div class="intel-panel-field">
+            <label class="intel-field-label" for="intelType">Content type</label>
+            <div class="intel-select-wrap">
+              <select class="intel-select" id="intelType"><option value="">Any type</option></select>
+            </div>
+          </div>
+          <div class="intel-panel-field">
+            <label class="intel-field-label" for="intelSource">Source</label>
+            <div class="intel-select-wrap">
+              <select class="intel-select" id="intelSource"><option value="">Any source</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  <section class="intel-sec" id="research">
-    <div class="intel-sec-head">
-      <h2>Research &amp; insights</h2>
-      <p>Studies, trials and deeper analysis.</p>
-    </div>
-    <div class="intel-research">
-      <div class="intel-grid" id="researchHost"></div>
-      <p id="researchEmpty" hidden style="margin:0;color:var(--muted);font-size:14px">
-        No research items have been published yet.
+      <div class="intel-panel-foot">
+        <p class="intel-result-count" id="latestCount"></p>
+        <button class="intel-more-toggle" type="button" id="moreToggle" aria-expanded="false"
+                aria-controls="moreFilters">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>More filters</span>
+          <span class="intel-more-count" id="moreFiltersCount" hidden></span>
+        </button>
+        <button class="intel-reset" type="button" id="intelReset" data-reset hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8.7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v5h5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Reset filters
+        </button>
+      </div>
+      <p class="intel-filter-state" id="filterState" hidden></p>
+    </section>
+
+    <!-- ── FEATURED ────────────────────────────────────────────────────────
+         The top of whatever the filters currently select: one lead story with
+         a large image, and the three behind it as a supporting rail. -->
+    <section class="intel-feature" id="featured" hidden>
+      <div class="intel-feature-lead" id="featuredHost"></div>
+      <aside class="intel-feature-side" aria-label="More insights">
+        <div id="featuredSide"></div>
+        <a class="intel-side-more" href="#latest">View all insights
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </aside>
+    </section>
+
+    <!-- ── UAE ─────────────────────────────────────────────────────────── -->
+    <section class="intel-sec" id="uae" hidden>
+      <div class="intel-sec-head">
+        <h2>UAE healthcare news</h2>
+        <p>From UAE health authorities and providers.</p>
+        <span class="intel-count" id="uaeCount"></span>
+      </div>
+      <div class="intel-grid" id="uaeHost"></div>
+    </section>
+
+    <!-- ── LATEST INSIGHTS ─────────────────────────────────────────────── -->
+    <section class="intel-sec" id="latest">
+      <div class="intel-sec-head">
+        <h2>Latest Insights</h2>
+        <span class="intel-count" id="streamCount"></span>
+      </div>
+
+      <div class="intel-grid" id="streamHost"></div>
+
+      <div id="streamEmpty" hidden class="intel-empty">
+        <h3>No articles match these filters</h3>
+        <p id="streamEmptyWhy">Nothing in the published archive matches this combination.</p>
+        <p style="margin-top:18px"><button class="btn btn-outline" type="button" data-reset>Reset filters</button></p>
+      </div>
+
+      <p class="intel-more-row">
+        <button class="btn btn-outline" type="button" id="intelMore" hidden>Load more</button>
       </p>
-    </div>
-  </section>
+      <p class="intel-viewnote" id="viewNote" hidden></p>
+    </section>
 
-  <!-- Shown when the pipeline has produced nothing. It states why, rather than
-       filling the page with placeholder stories. -->
-  <section class="intel-sec" id="bootEmpty" hidden>
-    <div class="intel-empty">
-      <h3>No intelligence has been published yet</h3>
-      <p>Doctorna Intelligence publishes only what a real source has actually reported. Run the
-         pipeline to collect from the configured sources:</p>
-      <p style="margin-top:14px"><code>node tools/intel-cli.mjs cycle</code></p>
-      <p style="margin-top:14px" id="bootEmptyNote"></p>
-    </div>
-  </section>
+    <section class="intel-sec" id="global" hidden>
+      <div class="intel-sec-head">
+        <h2>Global healthcare intelligence</h2>
+        <p>International regulators, research bodies and publications.</p>
+        <span class="intel-count" id="globalCount"></span>
+      </div>
+      <div class="intel-grid" id="globalHost"></div>
+    </section>
 
+    <section class="intel-sec" id="research">
+      <div class="intel-sec-head">
+        <h2>Research &amp; insights</h2>
+        <p>Studies, trials and deeper analysis.</p>
+      </div>
+      <div class="intel-research">
+        <div class="intel-grid" id="researchHost"></div>
+        <p id="researchEmpty" hidden style="margin:0;color:var(--muted);font-size:14px">
+          No research items have been published yet.
+        </p>
+      </div>
+    </section>
+
+    <!-- Shown when the pipeline has produced nothing. It states why, rather
+         than filling the page with placeholder stories. -->
+    <section class="intel-sec" id="bootEmpty" hidden>
+      <div class="intel-empty">
+        <h3>No intelligence has been published yet</h3>
+        <p>Doctorna Intelligence publishes only what a real source has actually reported. Run the
+           pipeline to collect from the configured sources:</p>
+        <p style="margin-top:14px"><code>node tools/intel-cli.mjs cycle</code></p>
+        <p style="margin-top:14px" id="bootEmptyNote"></p>
+      </div>
+    </section>
+
+  </div>
 </main>
 
 <footer class="intel-foot">
