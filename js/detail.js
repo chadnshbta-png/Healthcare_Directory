@@ -9,7 +9,7 @@
 import {
   db, R, FLAG, rowFacility, rowFacilities, rowFacilityIdxs, rowLanguages, rowHas, rowLicences,
   facilityTopSpecialties, rowRolesAt, rowHasRoleAt,
-  rowIsLicensedAt, facilityLicensedCount,
+  rowIsLicensedAt, facilityLicensedCount, rowPrimaryFacilityIdxs,
   doctorSourceUrl, facilityHref, doctorHref,
 } from './data.js';
 import {
@@ -66,15 +66,35 @@ export function initDetail(container, closeHandler, pageChangeHandler = () => {}
     repaintPeople(box.dataset.facilitySearch);
   });
 
-  // Specialty chips: pick / unpick, and "Load more".
+  // Specialty chips: pick / unpick, and the reveal controls.
   host.addEventListener('click', (e) => {
     const more = e.target.closest('[data-spec-more]');
-    if (more) {
+    const all = e.target.closest('[data-spec-all]');
+    const less = e.target.closest('[data-spec-less]');
+    if (more || all || less) {
       e.preventDefault();
-      specShown += SPEC_STEP;
+      // Infinity is safe: the renderer slices, so it simply stops at the end.
+      if (all) specShown = Infinity;
+      else if (less) specShown = SPEC_FIRST;
+      else specShown += SPEC_STEP;
       repaintSpecialties();
       return;
     }
+    // "All" clears the specialty filter and shows every professional the
+    // register places at this facility.
+    if (e.target.closest('[data-spec-all-people]')) {
+      e.preventDefault();
+      if (state.facilitySpecialty !== '') {
+        state.facilitySpecialty = '';
+        state.facilityPage = 1;
+        onPageChange();
+        repaintSpecialties();
+        const list0 = host.querySelector('[data-facility-people]');
+        if (list0?.dataset.facilityPeople) repaintPeople(list0.dataset.facilityPeople);
+      }
+      return;
+    }
+
     const chip = e.target.closest('[data-spec-pick]');
     if (!chip) return;
     e.preventDefault();
@@ -107,6 +127,7 @@ export function initDetail(container, closeHandler, pageChangeHandler = () => {}
   });
 }
 
+
 /** Redraw the chip row in place, preserving scroll position. */
 function repaintSpecialties() {
   const list = host.querySelector('[data-facility-people]');
@@ -128,6 +149,18 @@ function repaintPeople(facilityId) {
 /** One fact; returns '' when there is no value, so nothing empty renders. */
 const field = (label, value) =>
   value ? `<div class="dt-field"><dt>${esc(label)}</dt><dd>${value}</dd></div>` : '';
+
+/**
+ * A label/value ROW, not a cell in a grid.
+ *
+ * `field()` lays facts out as equal-weight boxed tiles, which reads as a data
+ * table and leaves a hole whenever the count is not a multiple of the column
+ * count. A short list of identifiers reads better as rows, so the facility
+ * page uses these where the facts are a list rather than a set of figures.
+ * Renders nothing without a value, so absent fields leave no empty row.
+ */
+const frow = (label, value) =>
+  value ? `<div class="frow-item"><dt>${esc(label)}</dt><dd>${value}</dd></div>` : '';
 
 /**
  * One labelled group inside "Records held by the register".
@@ -185,8 +218,20 @@ const workEntry = (w) => {
   for (const x of w.o ?? []) meta.push(`<span>${esc(x)}</span>`);
   // `x` is a trailing value the register did not label as either a facility or
   // a city, so it is shown plainly rather than captioned as a workplace.
+  //
+  // The facility becomes a link ONLY when its name resolves to exactly one
+  // facility page. Everything else stays plain text — an unresolvable or
+  // ambiguous name gets no link and no icon, so the icon reliably means "this
+  // opens a real page" rather than "this might".
+  const record = w.f ? facilityRecordByName(w.f) : null;
   const where = w.f
-    ? `<p class="rec-where">${esc(w.f)}</p>`
+    ? (record
+      ? `<p class="rec-where"><a class="rec-facility" href="${facilityHref(record)}">
+           <span class="rec-facility-name">${esc(w.f)}</span>
+           <span class="rec-facility-go" aria-hidden="true">${ICON.ext}</span>
+           <span class="sr-only">— open facility page</span>
+         </a></p>`
+      : `<p class="rec-where">${esc(w.f)}</p>`)
     : (w.x ? `<p class="rec-where dim">${esc(w.x)}</p>` : '');
   return `<li class="rec-entry${w.c ? ' is-current' : ''}">
     <div class="rec-entry-head">
@@ -199,14 +244,55 @@ const workEntry = (w) => {
 };
 
 /** One current licence exactly as the register lists it. */
-const licenceEntry = (l) => `<li class="rec-entry is-current">
-  <div class="rec-entry-head">
-    <p class="rec-role">${esc(l.t || 'Role not published')}</p>
-    ${l.s ? `<span class="rec-now">${esc(l.s)}</span>` : ''}
-  </div>
-  ${l.f ? `<p class="rec-where">${esc(l.f)}</p>` : ''}
-  ${l.n ? `<p class="rec-meta"><span class="rec-lic">Licence <span class="mono">${esc(l.n)}</span></span></p>` : ''}
-</li>`;
+const licenceEntry = (l) => {
+  // Same rule as work history: linked only when the name resolves to exactly
+  // one facility page, so the icon always means the link works.
+  const record = l.f ? facilityRecordByName(l.f) : null;
+  return `<li class="rec-entry is-current">
+    <div class="rec-entry-head">
+      <p class="rec-role">${esc(l.t || 'Role not published')}</p>
+      ${l.s ? `<span class="rec-now">${esc(l.s)}</span>` : ''}
+    </div>
+    ${l.f
+      ? (record
+        ? `<p class="rec-where"><a class="rec-facility" href="${facilityHref(record)}">
+             <span class="rec-facility-name">${esc(l.f)}</span>
+             <span class="rec-facility-go" aria-hidden="true">${ICON.ext}</span>
+             <span class="sr-only">— open facility page</span>
+           </a></p>`
+        : `<p class="rec-where">${esc(l.f)}</p>`)
+      : ''}
+    ${l.n ? `<p class="rec-meta"><span class="rec-lic">Licence <span class="mono">${esc(l.n)}</span></span></p>` : ''}
+  </li>`;
+};
+
+/**
+ * One section of the career timeline: its own card, always open.
+ *
+ * The record sets used to be disclosure rows stacked inside a single
+ * "Additional records" block, so the whole career sat behind three collapsed
+ * summaries. Each set is now a section a reader can see at a glance, which is
+ * what makes the page read like a profile rather than a filing cabinet.
+ */
+const timelineSection = (icon, title, note, body) => `
+  <section class="tl-section">
+    <header class="tl-head">
+      <span class="tl-ico" aria-hidden="true">${icon}</span>
+      <h4 class="tl-title">${esc(title)}</h4>
+      ${note ? `<span class="tl-note">${esc(note)}</span>` : ''}
+    </header>
+    ${body}
+  </section>`;
+
+/** The same section when the register published nothing of that kind. */
+const timelineAbsent = (icon, title, note) => `
+  <section class="tl-section is-absent">
+    <header class="tl-head">
+      <span class="tl-ico" aria-hidden="true">${icon}</span>
+      <h4 class="tl-title">${esc(title)}</h4>
+      <span class="tl-note">${esc(note || 'Not published')}</span>
+    </header>
+  </section>`;
 
 /**
  * One education entry, rendered from EVERY field the register published for it.
@@ -246,6 +332,32 @@ const eduEntry = (e) => {
 const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
 
 /**
+ * Facility name -> the facility record it unambiguously names, or null.
+ *
+ * Work-history entries carry a facility NAME, not an id, so a link can only be
+ * offered once that name resolves to exactly one facility in this dataset.
+ * Names that match several facilities (63 rows share 14 trimmed names) resolve
+ * to null and render as plain text: a link to the wrong branch would be worse
+ * than no link, and inventing a URL for an unknown facility is not an option.
+ *
+ * Built once, lazily, and only from records already loaded.
+ */
+let facilityByNameCache = null;
+function facilityRecordByName(name) {
+  if (typeof name !== 'string' || name.trim() === '') return null;
+  if (!facilityByNameCache) {
+    facilityByNameCache = new Map();
+    for (const f of db.facilities) {
+      const key = f.name.trim().toLowerCase();
+      // A repeated name is marked ambiguous rather than overwritten, so the
+      // second facility cannot silently win the link.
+      facilityByNameCache.set(key, facilityByNameCache.has(key) ? null : f);
+    }
+  }
+  return facilityByNameCache.get(name.trim().toLowerCase()) ?? null;
+}
+
+/**
  * Build both groups from a loaded profile.
  *
  * `flags` is what doctors.json already knows — which record types EXIST. It is
@@ -256,52 +368,61 @@ function recordsBody(profile, flags) {
   const work = profileWork(profile);
   const licences = profileLicences(profile);
   const edu = profileEducation(profile);
-  const contact = profileContact(profile);
   const haveDetail = profile !== null;
 
-  const records = [];
-
-  if (licences.length) {
-    records.push({
-      icon: ICON.shield, label: 'Current licences', open: true,
-      note: plural(licences.length, 'active placement', 'active placements'),
-      body: `<ul class="rec-list">${licences.map(licenceEntry).join('')}</ul>`,
-    });
-  }
+  // Career order, deliberately: WORK HISTORY FIRST, then the current licence,
+  // then education — the order a person reads a professional profile in, and
+  // the reverse of the old block, which led with the licence.
+  const sections = [];
 
   if (work.length) {
-    records.push({
-      icon: ICON.work, label: 'Work history',
-      note: plural(work.length, 'entry', 'entries'),
-      body: `<ul class="rec-list">${work.map(workEntry).join('')}</ul>`,
-    });
+    sections.push(timelineSection(
+      ICON.work, 'Work history', plural(work.length, 'entry', 'entries'),
+      `<ol class="tl-list">${work.map(workEntry).join('')}</ol>`,
+    ));
   } else {
-    records.push({
-      icon: ICON.work, label: 'Work history', absent: true,
-      note: flags.experience
+    sections.push(timelineAbsent(ICON.work, 'Work history',
+      flags.experience
         ? (haveDetail ? 'Not published' : 'Held by the register')
-        : 'Not published',
-    });
+        : 'Not published'));
+  }
+
+  if (licences.length) {
+    sections.push(timelineSection(
+      ICON.shield, 'Current license',
+      plural(licences.length, 'active placement', 'active placements'),
+      `<ol class="tl-list">${licences.map(licenceEntry).join('')}</ol>`,
+    ));
   }
 
   if (edu.length) {
-    records.push({
-      // Open by default: the count in the summary and the list beneath it must
-      // agree on sight. Every entry the register published is in this list —
-      // the renderer maps the whole array and never slices it.
-      icon: ICON.study, label: 'Education', open: true,
-      note: plural(edu.length, 'entry', 'entries'),
-      body: `<ul class="rec-list">${edu.map(eduEntry).join('')}</ul>`,
-    });
+    // Every entry the register published is in this list — the renderer maps
+    // the whole array and never slices it, so the count and the list agree.
+    sections.push(timelineSection(
+      ICON.study, 'Education', plural(edu.length, 'entry', 'entries'),
+      `<ol class="tl-list">${edu.map(eduEntry).join('')}</ol>`,
+    ));
   } else {
-    records.push({
-      icon: ICON.study, label: 'Education', absent: true,
-      note: flags.education
+    sections.push(timelineAbsent(ICON.study, 'Education',
+      flags.education
         ? (haveDetail ? 'Not published' : 'Held by the register')
-        : 'Not published',
-    });
+        : 'Not published'));
   }
 
+  return `<div class="timeline">${sections.join('')}</div>`;
+}
+
+/**
+ * The PROFESSIONAL'S OWN published contact, for the right-hand column.
+ *
+ * This is the professional's phone / email / LinkedIn — never a facility's.
+ * The facility contact card that used to sit in this column has been removed:
+ * a person's page should not present their employer's switchboard as if it
+ * were their own contact detail. Facility contact lives on the facility page.
+ */
+function contactBody(profile, flags) {
+  const contact = profileContact(profile);
+  const haveDetail = profile !== null;
   const ICON_FOR = {
     phone: ICON.phone, email: ICON.mail, linkedin: ICON.linkedin, twitter: ICON.twitter,
   };
@@ -320,10 +441,73 @@ function recordsBody(profile, flags) {
     if (flags.linkedIn) contactRows.push({ icon: ICON.linkedin, label: 'LinkedIn', absent: true, note: 'Available on the register' });
   }
 
-  return `<div class="recgroups">
-    ${recGroup('Additional records', records, 'The register holds no further records for this professional.')}
-    ${recGroup('Published contact', contactRows, 'The register publishes no contact channel for this professional.')}
+  // No card at all rather than a card saying there is nothing in it.
+  if (!contactRows.length) return '';
+  return `<div class="aside-card">
+    <h3>Published contact</h3>
+    <ul class="recgroup-list">${contactRows.map(recRow).join('')}</ul>
   </div>`;
+}
+
+/**
+ * Every facility this professional is linked to, as cards.
+ *
+ * READS the relationship model, never changes it. Each card is one entry of
+ * `rowFacilities(r)` — the professional's all-linked set — and the badges are
+ * read straight from the existing accessors:
+ *
+ *   rowPrimaryFacilityIdxs(r)  the register's own primary registration(s)
+ *   rowIsLicensedAt(r, idx)    an ACTIVE current licence held there
+ *   rowRolesAt(r, idx)         the role the register records at that facility
+ *
+ * A professional with several facilities gets several cards: the list is never
+ * collapsed to one, never de-duplicated, and never re-ordered by anything but
+ * the badge rank below, which is presentation only.
+ */
+function facilityRelationCards(r, facilities) {
+  const primary = new Set(rowPrimaryFacilityIdxs(r));
+  // Primary first, then licensed, then the rest — a reading order, not a
+  // filter. Every facility in `facilities` is rendered either way.
+  const rank = (f) => (primary.has(f.idx) ? 0 : (rowIsLicensedAt(r, f.idx) ? 1 : 2));
+  const ordered = [...facilities].sort((a, b) => rank(a) - rank(b));
+
+  return `<ul class="fcards">${ordered.map((f) => {
+    const isPrimary = primary.has(f.idx);
+    const isLicensed = rowIsLicensedAt(r, f.idx);
+    const roles = rowRolesAt(r, f.idx)
+      .map((i) => db.dict.specialty[i]).filter(Boolean)
+      .map((s) => specialtyLabel(s));
+
+    const badges = [];
+    if (isPrimary) badges.push('<span class="fcard-badge is-primary">Primary registration</span>');
+    if (isLicensed) badges.push('<span class="fcard-badge is-licensed">Active licence here</span>');
+    if (!isPrimary && !isLicensed) badges.push('<span class="fcard-badge">Linked facility</span>');
+
+    const meta = [];
+    if (f.record?.type) meta.push(esc(facilityTypeLabel(f.record.type)));
+    if (f.record) meta.push(`${num(facilityLicensedCount(f.record))} professionals`);
+
+    return `<li class="fcard">
+      <span class="fcard-glyph" aria-hidden="true">${ICON.facility}</span>
+      <span class="fcard-body">
+        <span class="fcard-head">
+          <span class="fcard-name">${f.record
+            ? `<a href="${facilityHref(f.record)}">${esc(f.name)}</a>`
+            : esc(f.name)}</span>
+          <span class="fcard-badges">${badges.join('')}</span>
+        </span>
+        ${roles.length ? `<span class="fcard-role">${esc(roles.join(' · '))}</span>` : ''}
+        ${meta.length ? `<span class="fcard-meta">${meta.join('<span class="rec-dot" aria-hidden="true">·</span>')}</span>` : ''}
+      </span>
+      ${/* The action only exists when the facility resolves to a real page in
+            this dataset. An unresolved name gets no link rather than a guess. */''}
+      ${f.record
+        ? `<a class="fcard-go" href="${facilityHref(f.record)}">
+             View facility <span aria-hidden="true">${ICON.ext}</span>
+           </a>`
+        : '<span class="fcard-go is-off">Not in this dataset</span>'}
+    </li>`;
+  }).join('')}</ul>`;
 }
 
 /** Only render a block when it actually has content. */
@@ -417,20 +601,19 @@ function doctorView(id) {
           ${field('Register ID', `<span class="mono">${esc(r[R.ID])}</span>`)}
         </dl>`)}
 
+        ${/* Additional record sits directly under Professional information and
+              ABOVE the facility block: the career is what a reader wants next,
+              and the facility list reads as a footnote to it rather than an
+              interruption. */''}
+        ${block('Additional record',
+          `<div id="recordsHost" data-records-for="${esc(r[R.ID])}"
+                data-flags="${esc(JSON.stringify(recordFlags))}">${recordsBody(null, recordFlags)}</div>`)}
+
+        ${block(facilities.length > 1 ? 'Facilities' : 'Facility',
+          facilities.length ? facilityRelationCards(r, facilities) : '')}
+
         ${block('Languages spoken', langs.length
           ? `<div class="fac-specs" style="border:0;padding:0;margin:0">${langs.map((l) => `<span class="tag">${esc(l)}</span>`).join('')}</div>`
-          : '')}
-
-        ${block(facilities.length > 1 ? 'Facilities' : 'Facility', facilities.length
-          ? `<dl class="factlist">
-              ${facilities.map((f) => field(
-                f.record?.type ? facilityTypeLabel(f.record.type) : 'Facility',
-                (f.record
-                  ? `<a class="link-brand" href="${facilityHref(f.record)}">${esc(f.name)}</a>`
-                  : esc(f.name))
-                + (f.record ? ` <span class="dim">· ${num(f.record.doctorCount)} linked</span>` : ''),
-              )).join('')}
-            </dl>`
           : '')}
 
         ${block('Licensing information', licence
@@ -443,9 +626,6 @@ function doctorView(id) {
             </dl>`
           : '')}
 
-        ${block('Records held by the register',
-          `<div id="recordsHost" data-records-for="${esc(r[R.ID])}"
-                data-flags="${esc(JSON.stringify(recordFlags))}">${recordsBody(null, recordFlags)}</div>`)}
       </div>
 
       <aside class="detail-aside">
@@ -454,12 +634,12 @@ function doctorView(id) {
           <p>This page shows the work history, education and published contact this directory holds. The register is the authority on all of it.</p>
           <a class="btn btn-primary" href="${doctorSourceUrl(r[R.ID])}" target="_blank" rel="noopener">Open official profile ${ICON.ext}</a>
         </div>
-        ${facilities.filter((f) => f.record).map((f) => `<div class="aside-card">
-          <h3>${esc(f.name)}</h3>
-          <p>${num(f.record.doctorCount)} licensed professionals are linked to this facility.</p>
-          <a class="btn btn-outline" href="${facilityHref(f.record)}">View facility</a>
-        </div>`).join('')}
-        <p class="aside-note">Fields the register does not publish are left out of this page rather than shown as blank.</p>
+        ${/* The professional's OWN contact. The facility contact card that used
+              to live here is gone: a facility's phone and address belong on the
+              facility page, not in the sidebar of every person who works there.
+              Hydrated from the profile shard alongside #recordsHost. */''}
+        <div id="contactHost" data-contact-for="${esc(r[R.ID])}"
+             data-flags="${esc(JSON.stringify(recordFlags))}">${contactBody(null, recordFlags)}</div>
       </aside>
     </div>
   </article>`;
@@ -560,6 +740,7 @@ const SPEC_STEP = 10;
 /** How many chips are currently revealed. Reset when a facility is opened. */
 let specShown = SPEC_FIRST;
 
+
 /**
  * The specialty chips.
  *
@@ -578,19 +759,59 @@ function specialtyChips(labels) {
   const ordered = picked && labels.includes(picked) ? [picked, ...rest] : labels;
   const shown = ordered.slice(0, specShown);
   const remaining = ordered.length - shown.length;
+
+  // "All" is a permanent FIRST chip, outside the reveal window: it must never
+  // be pushed out of view by "Show less", because it is how the reader clears
+  // the filter. It is selected whenever no specialty is, so the row always has
+  // exactly one active chip and the default state is visibly "everyone".
+  const allOn = !picked;
+  const allChip = `<button class="tag tag-brand spec-chip spec-chip-all${allOn ? ' is-on' : ''}"
+      type="button" data-spec-all-people aria-pressed="${allOn}">All</button>`;
+
   return `<div class="fac-specs fac-specs-all" data-spec-chips>
+      ${allChip}
       ${shown.map((label) => {
         const on = state.facilitySpecialty === label;
         return `<button class="tag tag-brand spec-chip${on ? ' is-on' : ''}" type="button"
                 data-spec-pick="${esc(label)}" aria-pressed="${on}">${esc(specialtyLabel(label))}</button>`;
       }).join('')}
     </div>
-    ${remaining > 0
-      // No button once everything is shown — not a disabled one.
-      ? `<button class="btn btn-outline btn-sm spec-more" type="button" data-spec-more>
-           Load more<span class="spec-more-n">${num(remaining)} left</span>
-         </button>`
-      : ''}`;
+    ${specControls(ordered.length, remaining)}`;
+}
+
+/**
+ * The controls under the chip row.
+ *
+ * Three states, never a disabled button:
+ *   more to show   -> "Load more" (a step) and "All" (the lot)
+ *   everything out -> "Show less" (back to the initial window)
+ *   short list     -> nothing at all
+ *
+ * "All" exists because stepping ten at a time through a facility with 60
+ * specialties is a chore when the visitor already knows they want the whole
+ * list. No specialty is ever dropped in any state — the window only decides how
+ * many of `ordered` are painted, and `ordered` is always the complete set.
+ */
+function specControls(total, remaining) {
+  if (total <= SPEC_FIRST) return '';
+  const wrap = (inner) => `<div class="spec-controls">${inner}</div>`;
+  if (remaining > 0) {
+    return wrap(`
+      <button class="btn btn-outline btn-sm spec-more" type="button" data-spec-more>
+        Load more<span class="spec-more-n">${num(remaining)} left</span>
+      </button>
+      ${/* "Show all" reveals every chip. It must NOT be called "All": the
+            first chip in the row is already an "All" that clears the filter,
+            and two controls with the same label doing different things in one
+            section is a trap. */''}
+      <button class="btn btn-ghost btn-sm spec-more" type="button" data-spec-all>
+        Show all<span class="spec-more-n">${num(total)}</span>
+      </button>`);
+  }
+  return wrap(`
+    <button class="btn btn-ghost btn-sm spec-more" type="button" data-spec-less>
+      Show less
+    </button>`);
 }
 
 /** Professionals shown per page on a facility detail page. */
@@ -694,6 +915,229 @@ function facilityPager(facilityId) {
   </nav>`;
 }
 
+/**
+ * Contact, location and operating information, as the register publishes it.
+ *
+ * The register DOES publish a facility's category, coordinates, area and street
+ * address — through its facility registry and the per-facility lookup its map
+ * uses. It does NOT publish a phone number, an email address, a website, an
+ * accreditation list or opening hours anywhere public.
+ *
+ * So each field renders only when it actually has a value, and the footnote
+ * names what the register withholds. A blank is never left to look like a
+ * failed fetch, and nothing here is filled in from another source.
+ */
+/**
+ * Contact rows for a facility, in one place so the facility page and the
+ * professional page cannot disagree about what the register publishes.
+ *
+ * Only fields that HAVE a value produce a row. Nothing is rendered as an empty
+ * slot, a dash, or "not available" — an absent field simply is not there.
+ * Every value comes from DHA's own facility endpoints; none is inferred, and
+ * none is taken from a third party.
+ */
+/**
+ * The facility's published contact rows: phone, email, website, address.
+ *
+ * Only fields that HAVE a value produce a row. Nothing is rendered as an empty
+ * slot, a dash, or "not available" — an absent field simply is not there.
+ * Every value comes from DHA's own facility endpoints; none is inferred, and
+ * none is taken from a third party.
+ *
+ * Coordinates are deliberately NOT a row here. Raw latitude/longitude is not
+ * contact information a reader can use; the Location section below draws them
+ * as a map instead. Makani is not rendered anywhere on the page.
+ */
+function facilityContactRows(f) {
+  const c = f.contact ?? {};
+  const rows = [];
+
+  if (c.phone) {
+    // tel: cannot carry spaces or punctuation reliably.
+    rows.push({ icon: ICON.phone, label: 'Phone', value: c.phone, href: `tel:${String(c.phone).replace(/[^\d+]/g, '')}` });
+  }
+  if (c.email) rows.push({ icon: ICON.mail, label: 'Email', value: c.email, href: `mailto:${c.email}` });
+  if (c.website) {
+    // The register stores bare hosts ("www.example.ae") as often as full URLs.
+    const url = /^https?:\/\//i.test(c.website) ? c.website : `https://${c.website}`;
+    rows.push({ icon: ICON.ext, label: 'Website', value: c.website, href: url, external: true });
+  }
+
+  // fullAddress is the detail page's own one-line rendering; `address` is the
+  // shorter string on the map record. Prefer the fuller one, never show both.
+  const address = c.fullAddress || c.address;
+  if (address) rows.push({ icon: ICON.pin, label: 'Address', value: address });
+
+  return rows;
+}
+
+/**
+ * One contact card: the whole card is the action when there is one.
+ *
+ * A card rather than a row, so phone / email / website can sit side by side as
+ * equal targets. An address has nowhere to go and renders as a plain card
+ * instead of a dead link.
+ */
+const contactCard = (r) => (r.href
+  ? `<a class="fcontact-card" href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ''}>
+      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
+      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
+      <span class="fcontact-go" aria-hidden="true">${r.external ? ICON.ext : ICON.chevron}</span>
+    </a>`
+  : `<div class="fcontact-card is-static">
+      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
+      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
+    </div>`);
+
+/** One contact row: a link when there is somewhere to go, otherwise a fact. */
+const contactRow = (r) => (r.href
+  ? `<li><a class="fcontact-row" href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ''}>
+      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
+      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
+      <span class="fcontact-go" aria-hidden="true">${r.external ? ICON.ext : ICON.chevron}</span>
+    </a></li>`
+  : `<li><span class="fcontact-row is-static">
+      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
+      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
+    </span></li>`);
+
+/**
+ * "Published contact" — the register's own wording for these fields.
+ *
+ * Renders nothing at all when this facility has none of them, rather than an
+ * empty section or a note explaining the absence.
+ */
+function facilityContactBlock(f) {
+  const rows = facilityContactRows(f);
+  if (!rows.length) return '';
+  // Phone / email / website are short, comparable values, so they sit side by
+  // side as equal cards. The address is a sentence, not a value, so it gets a
+  // full-width row of its own beneath rather than being squeezed into a third
+  // of the width. A facility missing any of them simply has fewer cards.
+  const compact = rows.filter((r) => r.label !== 'Address');
+  const address = rows.find((r) => r.label === 'Address');
+  return block('Published contact', `
+    ${compact.length ? `<div class="fcontact-cards">${compact.map(contactCard).join('')}</div>` : ''}
+    ${address ? `<div class="fcontact-cards fcontact-cards-wide">${contactCard(address)}</div>` : ''}`);
+}
+
+/**
+ * Valid published coordinates for this facility, or null.
+ *
+ * Guards against the three ways a coordinate goes wrong in this dataset:
+ * missing, non-numeric, and the 0,0 null-island placeholder. A facility that
+ * fails any of them gets no map rather than a map of the wrong place.
+ */
+function facilityCoords(f) {
+  const lat = Number(f.location?.latitude);
+  const lng = Number(f.location?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat === 0 && lng === 0) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+/**
+ * Location: the published place, drawn as a map.
+ *
+ * The raw numbers are never printed — a reader cannot use "25.2569, 55.2941",
+ * they can use a map. OpenStreetMap's embed is used because it needs no API
+ * key and no third-party script: it is one sandboxed iframe, loaded lazily, so
+ * a facility page that is never scrolled to the map costs nothing.
+ *
+ * "Open in Maps" stays as the secondary action for anyone who wants directions
+ * in their own map app. With no valid coordinates the whole section is omitted
+ * rather than showing an empty frame or guessing a location from the address.
+ */
+function facilityLocationBlock(f) {
+  const co = facilityCoords(f);
+  const l = f.location ?? {};
+  const c = f.contact ?? {};
+  const address = c.fullAddress || c.address || '';
+
+  const place = [l.area, l.city, l.emirate].filter(Boolean);
+  const placeText = [...new Set(place)].join(', ');
+  const facts = [];
+  if (address) facts.push(['Address', address]);
+  // Only when it says something the address line did not already say.
+  if (placeText && (!address || !address.toLowerCase().includes(placeText.toLowerCase()))) {
+    facts.push([place.length > 1 ? 'Area' : 'Location', placeText]);
+  }
+  if (!co && !facts.length) return '';
+
+  const d = 0.004; // ~450 m of padding around the marker
+  const bbox = [co ? co.lng - d : 0, co ? co.lat - d : 0, co ? co.lng + d : 0, co ? co.lat + d : 0].join(',');
+  const osm = co
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${co.lat},${co.lng}`)}`
+    : '';
+  const maps = co
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${co.lat},${co.lng}`)}`
+    : (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : '');
+
+  return block('Location', `
+    ${facts.length ? `<dl class="factlist fac-place">
+      ${facts.map(([k, v]) => field(k, esc(String(v)))).join('')}
+    </dl>` : ''}
+    ${co ? `<div class="fac-map">
+      <iframe class="fac-map-frame" src="${esc(osm)}" loading="lazy" referrerpolicy="no-referrer"
+              title="Map showing the location of ${esc(f.name)}"></iframe>
+    </div>` : ''}
+    ${maps ? `<p class="fac-map-actions">
+      <a class="btn btn-outline btn-sm" href="${esc(maps)}" target="_blank" rel="noopener">
+        Open in Maps ${ICON.ext}
+      </a>
+    </p>` : ''}`);
+}
+
+/**
+ * Accreditations as structured entries, never a JSON dump.
+ *
+ * Each record carries { accreditingBody, accreditationName, accreditationType,
+ * issuedDate, validUntil } and any of them may be missing, so each line is
+ * rendered only when its value exists. Only 6% of facilities carry any — the
+ * section is absent for the rest rather than shown empty.
+ */
+function facilityAccreditationsBlock(f) {
+  if (!Array.isArray(f.accreditations) || !f.accreditations.length) return '';
+  const day = (s) => (typeof s === 'string' && s.length >= 10 ? s.slice(0, 10) : '');
+  const entries = f.accreditations.map((a) => {
+    const from = day(a.issuedDate);
+    const to = day(a.validUntil);
+    const name = a.accreditationName || a.accreditingBody || 'Accreditation';
+    // The body is a separate line only when it is not already the headline.
+    const body = a.accreditingBody && a.accreditationName ? a.accreditingBody : '';
+    return `<li class="accred">
+      <div class="accred-top">
+        <p class="accred-name">${esc(name)}</p>
+        ${a.accreditationType ? `<span class="accred-type">${esc(a.accreditationType)}</span>` : ''}
+      </div>
+      ${body ? `<p class="accred-body">${esc(body)}</p>` : ''}
+      ${from || to ? `<p class="accred-meta">
+        <span class="accred-dates">${esc([from, to].filter(Boolean).join(' — '))}</span>
+        ${from && to ? '<span class="accred-valid">Validity as published</span>' : ''}
+      </p>` : ''}
+    </li>`;
+  }).join('');
+  return block('Accreditations', `<ul class="accred-list">${entries}</ul>`);
+}
+
+/**
+ * DHA's own term is "add-ons": extra permits or services recorded against the
+ * facility. The register's wording is kept rather than reinterpreted. The
+ * detail page's list is richer (each entry is an object), so prefer it.
+ */
+function facilityAddOnsBlock(f) {
+  const addOns = Array.isArray(f.detailAddOns) && f.detailAddOns.length
+    ? f.detailAddOns.map((a) => (typeof a === 'string' ? a : a?.name)).filter(Boolean)
+    : (Array.isArray(f.addOns) ? f.addOns : []);
+  if (!addOns.length) return '';
+  return block('Add-ons', `
+    <p class="dt-note" style="margin:0 0 10px">Recorded by the register as facility add-ons.</p>
+    <div class="fac-specs fac-specs-all">
+      ${addOns.map((a) => `<span class="tag">${esc(a)}</span>`).join('')}
+    </div>`);
+}
+
 function facilityView(id) {
   const f = db.facilities.find((x) => x.id === id);
   if (!f) return notFound('Facility not found', `No facility with id ${esc(id)} exists in this dataset.`);
@@ -705,22 +1149,16 @@ function facilityView(id) {
   facilityQuery = '';
   specShown = SPEC_FIRST;
 
-  // Where the type came from, said plainly. The register publishes none, so the
-  // page names the evidence rather than implying an official field.
-  const TYPE_PROVENANCE = {
-    name: 'read from the registered facility name',
-    dha_type: "from the register's own keyword classification",
-    staff: 'inferred from the specialties of the professionals licensed here',
-    unclassified: 'no classifying evidence in the record',
-  };
-  /** The compact form, for the fact cell, which is one column wide. */
+  // Where a FALLBACK type came from. Only used when the register publishes no
+  // category of its own; the explanatory paragraph that used to restate this
+  // at the foot of the page is gone, so this qualifier is the only place it is
+  // said — and only on the facilities that actually need it.
   const TYPE_PROVENANCE_SHORT = {
     name: 'From the facility name',
     dha_type: 'From the register’s keyword read',
     staff: 'From the linked professionals',
     unclassified: 'No classifying evidence',
   };
-  const provenance = TYPE_PROVENANCE[f.typeSource] ?? TYPE_PROVENANCE.name;
   const provenanceShort = TYPE_PROVENANCE_SHORT[f.typeSource] ?? TYPE_PROVENANCE_SHORT.name;
 
   const sub = [];
@@ -754,12 +1192,45 @@ function facilityView(id) {
 
     <div class="detail-layout">
       <div>
-        ${block('Facility information', `<dl class="factlist">
-          ${field('Facility type', type ? `${esc(type)}<span class="dt-note">${esc(provenanceShort)}</span>` : '')}
-          ${field('Professionals working here', `${num(licensed)}<span class="dt-note">Currently licensed to practise at this facility</span>`)}
-          ${field('Facility ID', `<span class="mono">${esc(f.id)}</span>`)}
-        </dl>`)}
+        ${/* Item 14 order: about -> published contact -> specialties ->
+              accreditations -> add-ons -> location + map -> professionals.
+              Every one of these renders only when the facility actually has
+              the data, so a sparse record collapses to a short clean page
+              rather than a grid of blanks. */''}
+        ${/* ONE professional count is shown: the population the list below
+              actually holds. `f.listedByTheRegister` is still exported and
+              still in the dataset — it is simply not surfaced here, so the
+              page cannot present two numbers a reader has to reconcile. */''}
+        ${block('About this facility', `
+          <div class="fstats">
+            <div class="fstat">
+              <b>${num(licensed)}</b>
+              <span class="fstat-label">Professionals working here</span>
+              <span class="fstat-note">Hold an active licence corroborated at this facility — these are the people listed below</span>
+            </div>
+          </div>
+          <dl class="frows">
+            ${frow('Facility category', f.dhaCategory
+              ? `${esc(f.dhaCategory)}<span class="frow-note">The register's own category</span>`
+              : (type ? `${esc(type)}<span class="frow-note">${esc(provenanceShort)}</span>` : ''))}
+            ${frow('DHA facility ID', f.dhaFacilityId ? `<span class="mono">${esc(f.dhaFacilityId)}</span>` : '')}
+            ${frow('Medical director', f.medicalDirector ? esc(f.medicalDirector) : '')}
+            ${frow('Headquarters', f.headquarters ? esc(f.headquarters) : '')}
+          </dl>`)}
 
+        ${facilityContactBlock(f)}
+
+        ${/* ONE specialties section, immediately above the people it filters.
+              It is built from the SAME population as the list below
+              (facilityRegisteredSpecialties uses rowIsLicensedAt, exactly as
+              facilityPeopleIdx does), so every chip describes somebody who is
+              actually on screen and no chip can select nobody.
+
+              The facility's own DHA `specialities` field is no longer rendered:
+              it describes what the FACILITY is registered for, which is a
+              different population from its current staff, and showing both
+              side by side invited the reader to compare two lists that were
+              never comparable. The field is untouched in the dataset. */''}
         ${block('Specialties', regSpecs.length ? specialtyChips(regSpecs) : '')}
 
         <section class="detail-block people-block">
@@ -776,6 +1247,14 @@ function facilityView(id) {
           <ul class="pcard-grid" data-facility-people="${esc(f.id)}">${facilityPeopleRows(f.id)}</ul>
           <div data-facility-pager>${facilityPager(f.id)}</div>
         </section>
+
+        ${/* After the people: where it is, then the register's remaining
+              records. Both omit themselves entirely when unpublished. */''}
+        ${facilityLocationBlock(f)}
+
+        ${facilityAccreditationsBlock(f)}
+
+        ${facilityAddOnsBlock(f)}
       </div>
 
       <aside class="detail-aside">
@@ -784,7 +1263,6 @@ function facilityView(id) {
           <p>Narrow the whole directory to the ${num(f.doctorCount)} professionals linked to this facility, however they are linked.</p>
           <button class="btn btn-primary" type="button" data-facility-filter="${esc(f.name)}">Show these professionals</button>
         </div>
-        <p class="aside-note">The register publishes no facility type, so this one is ${esc(provenance)}. Everything else on this page is a published field.</p>
       </aside>
     </div>
   </article>`;
@@ -820,6 +1298,13 @@ async function hydrateRecords(id) {
   const still = host.querySelector('#recordsHost');
   if (!still || still.dataset.recordsFor !== id) return;
   still.innerHTML = recordsBody(profile, flags);
+  // The aside's contact card comes from the same shard and carries the same
+  // identity guard, so a fast click-through cannot leave one professional's
+  // contact beside another's record.
+  const cmount = host.querySelector('#contactHost');
+  if (cmount && cmount.dataset.contactFor === id) {
+    cmount.innerHTML = contactBody(profile, flags);
+  }
 }
 
 /**

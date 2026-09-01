@@ -281,7 +281,11 @@ export function renderHeroStats() {
   document.querySelector('[data-viewcount="facilities"]').textContent = num(t.facilitiesWithDoctors);
 
   const when = new Date(db.meta.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  $('#heroGenerated').textContent = when;
+  // The hero's snapshot line was removed from the markup. Guard rather than
+  // assume: this function also sets the tab counts above, and a hard failure
+  // here would leave them showing the placeholder dash.
+  const generated = document.querySelector('#heroGenerated');
+  if (generated) generated.textContent = when;
   $('#footerMeta').textContent = `Register snapshot generated ${when}`;
 }
 
@@ -330,9 +334,10 @@ export function renderHeroSelects() {
   fill('#proLicence', db.facets.licenseType, (x) => LICENCE_LABEL[x.label] ?? x.label);
   fill('#proCategory', db.facets.category);
   fill('#proSpecialty', db.facets.specialty.slice(0, 60), (x) => specialtyLabel(x.label));
-  fill('#proLanguage', db.facets.language.slice(0, 60));
-  fill('#proFacility', db.facets.facility.slice(0, 60));
-  fill('#proNationality', db.facets.nationality.slice(0, 60));
+  // Language / Facility / Nationality were the Advanced Filters selects. That
+  // disclosure is gone from the search card, so there is nothing to populate.
+  // The FACETS are untouched — the sidebar rail still offers language and
+  // nationality, and `db.facets.facility` still backs facility search.
 }
 
 /* ═══ popular searches — the real top specialties ═══════════ */
@@ -346,6 +351,22 @@ export function renderPopular() {
 /* ═══ network — real facility types, editorial grid ═════════ */
 const PLANES = ['', 'p2', 'p3', 'p4'];
 
+/**
+ * Facility types that have a supplied photograph in assets/facility-types/.
+ *
+ * A static asset manifest, NOT a data mapping: the tiles, their names and
+ * their counts still come entirely from db.facilityTypes. A type listed here
+ * gets its own photograph as the tile background; a type that is not listed
+ * keeps the existing generated plane visual, unchanged. Nothing is invented
+ * for a type with no image, and no image is reused across types.
+ */
+const FACILITY_TYPE_PHOTO = new Set([
+  'hospital', 'medical_center', 'clinic', 'polyclinic',
+  'pharmacy', 'dental', 'home_healthcare',
+]);
+const facilityTypePhoto = (type) =>
+  (FACILITY_TYPE_PHOTO.has(type) ? `assets/facility-types/${type}.webp` : null);
+
 export function renderNetwork() {
   const host = $('#networkGrid');
   const types = db.facilityTypes.filter((t) => t.doctors > 0).slice(0, 7);
@@ -356,8 +377,14 @@ export function renderNetwork() {
   host.innerHTML = types.map((t, i) => {
     const label = facilityTypeLabel(t.type);
     const size = i === 0 ? ' etile-lead' : (i === 1 || i === last ? ' etile-wide' : '');
-    return `<button class="etile${size}" type="button" data-ftype="${esc(t.type)}" aria-label="Filter by ${esc(label)}">
-      <span class="etile-plane ${PLANES[i % PLANES.length]}" aria-hidden="true"></span>
+    const photo = facilityTypePhoto(t.type);
+    // The photograph replaces the generated plane; a type without one keeps the
+    // plane exactly as before. `is-photo` deepens the scrim so the white text
+    // stays readable over a bright interior shot.
+    return `<button class="etile${size}${photo ? ' is-photo' : ''}" type="button" data-ftype="${esc(t.type)}" aria-label="Filter by ${esc(label)}">
+      ${photo
+        ? `<img class="etile-photo" src="${esc(photo)}" alt="" aria-hidden="true" loading="lazy" decoding="async">`
+        : `<span class="etile-plane ${PLANES[i % PLANES.length]}" aria-hidden="true"></span>`}
       <span class="etile-grid" aria-hidden="true"></span>
       <span class="etile-scrim" aria-hidden="true"></span>
       <span class="etile-icon" aria-hidden="true">${facilityTypeIcon(t.type)}</span>

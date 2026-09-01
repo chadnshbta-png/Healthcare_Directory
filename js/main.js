@@ -157,9 +157,6 @@ function applySearchMode(mode, { rerun = true, keepFilters = false } = {}) {
   if (rerun) update();
 }
 
-/** Is the top Advanced Filters row revealed? */
-let topAdvancedOpen = false;
-
 /** Reflect the active mode on the selector buttons. */
 function syncSearchMode() {
   for (const b of $$('[data-smode]')) {
@@ -186,19 +183,7 @@ function syncSearchMode() {
 function syncTopFilters() {
   const mode = state.searchMode;
   for (const row of $$('[data-sfilters]')) {
-    const owner = row.dataset.sfilters;
-    row.hidden = owner === 'professionals-advanced'
-      ? !(mode === 'professionals' && topAdvancedOpen)
-      : owner !== mode;
-  }
-  const adv = $('#topAdvanced');
-  if (adv) {
-    adv.setAttribute('aria-expanded', String(topAdvancedOpen));
-    // Filters chosen behind the fold still narrow the results, so the count
-    // stays visible when the row is collapsed.
-    const n = state.languages.size + state.facilities.size + state.nationalities.size;
-    const badge = $('#topAdvancedCount');
-    if (badge) { badge.hidden = n === 0; badge.textContent = String(n); }
+    row.hidden = row.dataset.sfilters !== mode;
   }
   // Area, Gender and Add-Ons have no backing field anywhere in the dataset, so
   // they are simply not offered. No explanatory copy in the UI.
@@ -318,9 +303,6 @@ function wireSearch() {
   bindSelect('#proLicence', 'licences');
   bindSelect('#proCategory', 'categories');
   bindSelect('#proSpecialty', 'specialties');
-  bindSelect('#proLanguage', 'languages');
-  bindSelect('#proFacility', 'facilities');
-  bindSelect('#proNationality', 'nationalities');
 
   const proSort = $('#proSort');
   if (proSort) {
@@ -329,14 +311,6 @@ function wireSearch() {
       $('#sortSelect').value = e.target.value;
       state.page = 1;
       update();
-    });
-  }
-
-  const topAdv = $('#topAdvanced');
-  if (topAdv) {
-    topAdv.addEventListener('click', () => {
-      topAdvancedOpen = !topAdvancedOpen;
-      syncTopFilters();
     });
   }
 
@@ -377,9 +351,6 @@ function syncHeroSelects() {
   pick('#proLicence', state.licences);
   pick('#proCategory', state.categories);
   pick('#proSpecialty', state.specialties);
-  pick('#proLanguage', state.languages);
-  pick('#proFacility', state.facilities);
-  pick('#proNationality', state.nationalities);
   const sortEl = $('#proSort');
   if (sortEl) sortEl.value = state.sort;
 }

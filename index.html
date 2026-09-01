@@ -98,7 +98,7 @@
     <ul class="hero-proof">
       <li>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 4.4 4.9v4.4c0 3.3 2.3 6.4 5.6 7.6 3.3-1.2 5.6-4.3 5.6-7.6V4.9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m7.5 9.9 1.8 1.8 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Official register data
+        Trusted register data
       </li>
       <li>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.4 3.6 3.6L16 5.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -113,34 +113,36 @@
     <!-- unified search system -->
     <form class="searchbar" id="heroSearchForm" role="search">
       <div class="smode" role="radiogroup" aria-label="What to search">
+        <!-- Order is fixed: All -> Professionals -> Facilities. Professionals is
+             the primary intent of the directory, so it sits next to All. -->
         <button class="smode-opt is-active" type="button" role="radio" aria-checked="true" data-smode="all">All</button>
-        <button class="smode-opt" type="button" role="radio" aria-checked="false" data-smode="facilities">Facilities</button>
         <button class="smode-opt" type="button" role="radio" aria-checked="false" data-smode="professionals">Professionals</button>
+        <button class="smode-opt" type="button" role="radio" aria-checked="false" data-smode="facilities">Facilities</button>
       </div>
 
-      <label class="sfield sfield-main">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <span class="sr-only">Search the directory</span>
-        <input id="heroSearch" type="search" autocomplete="off" spellcheck="false"
-               placeholder="Search doctors, specialists, clinics or hospitals…"
-               aria-label="Search doctors, specialties, facilities or licence number"
-               role="combobox" aria-expanded="false" aria-controls="acList" aria-autocomplete="list">
-        <button class="sfield-clear" type="button" id="heroSearchClear" hidden aria-label="Clear search">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </button>
-        <ul class="ac-list" id="acList" role="listbox" aria-label="Search suggestions" hidden></ul>
-      </label>
-
-      <!-- ALL: the search box answers across every domain, so a filter here
-           would have to mean something different in each of them. Nothing but
-           the action. -->
-      <div class="searchbar-row searchbar-row-solo" data-sfilters="all">
-        <div class="searchbar-submit">
-          <button class="btn btn-primary" type="submit">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-            Search
+      <!-- The input and its action share one line, in every mode.
+           Previously each mode's filter row carried its own Search button, so
+           `All` (which has no filters) rendered a lone button on an otherwise
+           empty row — the excessive gap beside it. One button, always beside
+           the field, removes that dead space and keeps the action in the same
+           place as the visitor switches modes. -->
+      <div class="searchbar-main">
+        <label class="sfield sfield-main">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span class="sr-only">Search the directory</span>
+          <input id="heroSearch" type="search" autocomplete="off" spellcheck="false"
+                 placeholder="Search doctors, specialists, clinics or hospitals…"
+                 aria-label="Search doctors, specialties, facilities or licence number"
+                 role="combobox" aria-expanded="false" aria-controls="acList" aria-autocomplete="list">
+          <button class="sfield-clear" type="button" id="heroSearchClear" hidden aria-label="Clear search">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
-        </div>
+          <ul class="ac-list" id="acList" role="listbox" aria-label="Search suggestions" hidden></ul>
+        </label>
+        <button class="btn btn-primary searchbar-go" type="submit">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          Search
+        </button>
       </div>
 
       <!-- FACILITIES: facility-side filters only. Area and Add-Ons are absent
@@ -148,7 +150,7 @@
       <div class="searchbar-row" data-sfilters="facilities" hidden>
         <label class="sfield">
           <span class="sfield-body">
-            <span class="sfield-label">Category</span>
+            <span class="sfield-label">Facility Category</span>
             <select id="facCategory" aria-label="Filter by facility category">
               <option value="">Any category</option>
             </select>
@@ -165,13 +167,6 @@
           </span>
           <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </label>
-
-        <div class="searchbar-submit">
-          <button class="btn btn-primary" type="submit">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-            Search
-          </button>
-        </div>
       </div>
 
       <!-- PROFESSIONALS: the four primary filters, then a disclosure. -->
@@ -208,72 +203,17 @@
 
       </div>
 
-      <!-- The disclosure sits on its own line UNDER the primary filters, so
-           the advanced grid opens beneath it rather than beside them. Search
-           keeps the same row, right-aligned, and is reachable in every state. -->
-      <div class="searchbar-actions" data-sfilters="professionals" hidden>
-        <button class="sadv-toggle" type="button" id="topAdvanced"
-                aria-expanded="false" aria-controls="topAdvancedRow">
-          Advanced Filters
-          <span class="sadv-count" id="topAdvancedCount" hidden>0</span>
-          <svg class="sadv-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-        </button>
-        <button class="btn btn-primary searchbar-go" type="submit">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m13 13 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-          Search
-        </button>
-      </div>
 
-      <!-- Revealed BELOW the disclosure, never replacing the primary row. -->
-      <div class="searchbar-row searchbar-row-adv" id="topAdvancedRow" data-sfilters="professionals-advanced" hidden>
-        <label class="sfield">
-          <span class="sfield-body">
-            <span class="sfield-label">Language</span>
-            <select id="proLanguage" aria-label="Filter by language spoken">
-              <option value="">Any language</option>
-            </select>
-          </span>
-          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </label>
-
-        <label class="sfield">
-          <span class="sfield-body">
-            <span class="sfield-label">Facility</span>
-            <select id="proFacility" aria-label="Filter by facility">
-              <option value="">Any facility</option>
-            </select>
-          </span>
-          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </label>
-
-        <label class="sfield">
-          <span class="sfield-body">
-            <span class="sfield-label">Nationality</span>
-            <select id="proNationality" aria-label="Filter by nationality">
-              <option value="">Any nationality</option>
-            </select>
-          </span>
-          <svg class="sfield-caret" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        </label>
-      </div>
     </form>
 
     <div class="popular" id="popularSearches" aria-label="Popular searches">
       <span class="popular-label">Popular</span>
     </div>
 
-    <!-- verified dataset figures -->
-    <dl class="hero-stats" id="heroStats" aria-label="Directory size">
-      <div><dd data-stat="doctors">—</dd><dt>Professionals</dt></div>
-      <div><dd data-stat="facilities">—</dd><dt>Facilities</dt></div>
-      <div><dd data-stat="specialties">—</dd><dt>Specialties</dt></div>
-      <div><dd data-stat="links">—</dd><dt>Facility links</dt></div>
-    </dl>
-
-    <p class="hero-source">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 9.2v4.2M10 6.6v.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      Register snapshot generated <span id="heroGenerated">—</span>
-    </p>
+    <!-- The register-size figures and the snapshot date used to sit here. They
+         were removed from the UI by request; the numbers themselves are
+         untouched in db.meta.totals and still drive the result tab counts and
+         the footer. renderHeroStats() tolerates their absence. -->
 
   </div>
 </section>

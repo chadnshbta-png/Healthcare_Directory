@@ -31,7 +31,14 @@ const GROUPS = [
       + 'registered facility name and, where the name says nothing, from the specialties '
       + 'of the professionals licensed there.',
   },
-  { key: 'fac', stateKey: 'facilities', title: 'Facility', dict: 'facility', style: 'list', open: true, searchable: true, initial: 6, modes: ['all', 'facilities', 'professionals'] },
+  // The "Facility" sidebar filter is REMOVED in every mode.
+  //
+  // Only the sidebar control is gone. `state.facilities` and every reader of it
+  // stay in place, so nothing downstream changes: facility names still appear
+  // on cards and profiles, facility pages still list their professionals, the
+  // facility-side search still works, and the "Show these professionals" button
+  // on a facility page still narrows the directory through the same state. No
+  // DoctorFacility relationship is touched by this.
   { key: 'lang', stateKey: 'languages', title: 'Language', dict: 'language', style: 'list', open: false, searchable: true, initial: 8, modes: ['all', 'professionals'] },
   { key: 'nat', stateKey: 'nationalities', title: 'Nationality', dict: 'nationality', style: 'list', open: false, searchable: true, initial: 8, modes: ['all', 'professionals'] },
   { key: 'lic', stateKey: 'licences', title: 'Licence type', dict: 'licenseType', style: 'chips', open: false, labelMap: LICENCE_LABEL, modes: ['all', 'professionals'] },
@@ -43,7 +50,12 @@ let onChange = () => {};
 
 export function initFilters(handler) {
   onChange = handler;
-  $('#filterScroll').innerHTML = GROUPS.map(groupShell).join('') + flagsShell() + advancedShell();
+  // The "Profile data" group (Has facility / contact / languages / education)
+  // is no longer rendered. Its state and query logic are deliberately left in
+  // place: `state.toggles` simply stays empty, so nothing is filtered out and
+  // no underlying data is affected. Every reader of those toggles already
+  // guards for a missing element, so this is a pure UI removal.
+  $('#filterScroll').innerHTML = GROUPS.map(groupShell).join('') + advancedShell();
 
   const scroll = $('#filterScroll');
   scroll.addEventListener('click', handleClick);
@@ -102,23 +114,6 @@ function matchModeShell() {
   </div>`;
 }
 
-function flagsShell() {
-  return `<section class="fgroup" data-group="flags" data-open="true">
-    ${head('flags', 'Profile data', true)}
-    <div class="fgroup-body" id="fgroup-flags">
-      <div class="fgroup-tools" data-plain>
-        <button class="fgroup-clear" type="button" data-groupclear="flags" hidden>Clear</button>
-      </div>
-      <div class="seg-row">
-        ${Object.entries(TOGGLES).map(([k, label]) =>
-          `<button class="seg-chip" type="button" role="switch" aria-pressed="false" data-toggle="${k}">
-             ${esc(label)} <span class="opt-count" data-togglecount="${k}">—</span>
-           </button>`).join('')}
-      </div>
-    </div>
-  </section>`;
-}
-
 /** Some facets store a key ('hospital') but should read as a label. */
 // Display only. The VALUE a group filters on is always the stored label; this
 // just decides how that value reads on screen.
@@ -153,11 +148,14 @@ const inMode = (g) => !g.modes || g.modes.includes(state.searchMode);
  * backs them (see README ▸ facility schema), and offering a filter that cannot
  * filter is worse than not offering it.
  */
+// `fac` and `flags` are deliberately absent: the Facility and Profile data
+// sidebar groups have been removed, so ordering or folding them would refer to
+// sections that are never rendered.
 const MODE_ORDER = {
-  professionals: { lic: 1, cat: 2, spec: 3, lang: 5, fac: 6, nat: 7, flags: 8 },
-  facilities: { ftype: 1, spec: 2, fac: 3 },
+  professionals: { lic: 1, cat: 2, spec: 3, lang: 5, nat: 7 },
+  facilities: { ftype: 1, spec: 2 },
 };
-const ADVANCED = { professionals: new Set(['lang', 'fac', 'nat', 'flags']) };
+const ADVANCED = { professionals: new Set(['lang', 'nat']) };
 
 /** Are the extra professional filters currently revealed? */
 let advancedOpen = false;

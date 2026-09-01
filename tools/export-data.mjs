@@ -74,8 +74,35 @@ const intern = (kind, value) => {
 };
 
 // ── facilities first (their index is shared with doctor rows) ───────────────
+//
+// The DHA facility attributes are OPTIONAL columns: they are added to Facility
+// by the registry and detail merges, so a database that predates those merges
+// — or a minimal fixture built by the relationship tests — simply does not have
+// them. Naming one in the SELECT is a hard "no such column" error that takes
+// the whole export down, so the list is filtered against the live schema and a
+// missing column is selected as NULL. The reader downstream already treats null
+// as "the register published nothing", which is exactly right here too.
+const facilityColumns = new Set(
+  db.prepare('select name from pragma_table_info(?)').all('Facility').map((r) => r.name),
+);
+const OPTIONAL_FACILITY_COLUMNS = [
+  'dhaFacilityId', 'dhaCategory', 'latitude', 'longitude', 'dhaArea', 'dhaAreaCode',
+  'city', 'emirate', 'streetName', 'buildingName', 'apartmentVillaNumber',
+  'makaniNumber', 'addressLine', 'facilityImage', 'addOns', 'addOnCount', 'dhaFetchedAt',
+  'telephone', 'email', 'website', 'fullAddress', 'operatingHours', 'accreditations',
+  'specialities', 'medicalDirector', 'headquarters', 'detailAddOns', 'detailFetchedAt',
+];
+const optionalSelect = OPTIONAL_FACILITY_COLUMNS
+  .map((c) => (facilityColumns.has(c) ? `f.${c}` : `null as ${c}`))
+  .join(', ');
+{
+  const missing = OPTIONAL_FACILITY_COLUMNS.filter((c) => !facilityColumns.has(c));
+  if (missing.length) console.log(`  facility attrs   ${missing.length} column(s) absent from this database, exported as null`);
+}
+
 const facilityRows = db.prepare(`
   select f.id, f.nameTrimmed, f.nameRaw, f.typeGuess, f.facilityTagUrl, f.isInDhaMasterList,
+         ${optionalSelect},
          -- DISTINCT doctors, not rows. One professional can hold several
          -- DoctorFacility rows for the SAME facility — one per source section
          -- (search_dto, specialities, experience) — and count(*) would report
@@ -83,6 +110,18 @@ const facilityRows = db.prepare(`
          (select count(distinct df.doctorId) from DoctorFacility df
            where df.facilityId = f.id and ${life.viaDoctorId('df')}) as doctorCount
   from Facility f order by doctorCount desc, f.nameTrimmed asc`).all();
+
+/** Trimmed string, or null for empty/blank/missing. Never invents a value. */
+const nz = (v) => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s === '' ? null : s;
+};
+
+/** A column stored as a JSON array string -> array, or null. Never invents. */
+const jsonArray = (v) => {
+  if (typeof v !== 'string' || v.trim() === '') return null;
+  try { const a = JSON.parse(v); return Array.isArray(a) && a.length ? a : null; } catch { return null; }
+};
 
 const slugify = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 const usedSlugs = new Map();
@@ -116,8 +155,124 @@ const facilities = facilityRows.map((f, i) => {
     doctorCount: f.doctorCount,
     inDhaMasterList: Boolean(f.isInDhaMasterList),
     sourceUrl: f.facilityTagUrl ?? null,
+
+    // ── DHA facility attributes ────────────────────────────────────────────
+    // Real values from DHA's own public facility endpoints, no authentication:
+    //   registry  rest/retrieve/medicaldirectoryfacilitysearch   (name, id)
+    //   map       rest/retrieve/fetchfacility?latitude&longitude  (coordinates)
+    //   detail    /home/medical-directory/facility-details?facilityId=
+    //             (contact, address, specialities, director, accreditations)
+    // A null here means DHA returned nothing for THIS facility — never that a
+    // value was withheld, inferred, or taken from a third party. Nothing in
+    // this record comes from Google, maps data, or the facility's own site.
+    dhaFacilityId: f.dhaFacilityId ?? null,
+    dhaCategory: f.dhaCategory ?? null,
+    contact: {
+      // Published on the facility-details page. ~70% of facilities give a
+      // phone and an email, ~39% a website; the rest leave the field blank at
+      // source and stay null here.
+      phone: nz(f.telephone),
+      email: nz(f.email),
+      website: nz(f.website),
+      // DHA prints two addresses: `fullAddress` is the detail page's own
+      // one-line rendering, `address` the shorter string on the map record.
+      // Both are kept rather than merged — they disagree for some facilities
+      // and picking one would silently discard the other.
+      fullAddress: nz(f.fullAddress),
+      address: f.addressLine ?? null,
+      streetName: f.streetName ?? null,
+      buildingName: f.buildingName ?? null,
+      apartmentVillaNumber: jsonArray(f.apartmentVillaNumber),
+    },
+    location: {
+      area: f.dhaArea ?? null,
+      areaCode: f.dhaAreaCode ?? null,
+      city: f.city ?? null,
+      emirate: f.emirate ?? null,
+      latitude: f.latitude ?? null,
+      longitude: f.longitude ?? null,
+      makaniNumber: jsonArray(f.makaniNumber),
+    },
+    // DHA's "add-ons" — extra permits/services, in DHA's own terminology. This
+    // is the closest published thing to "facility operation"; the label is
+    // deliberately not reinterpreted.
+    addOns: jsonArray(f.addOns),
+    addOnCount: f.addOnCount ?? null,
+    // The detail page's own add-on list, richer than the map record's: each
+    // entry carries { name, code, proposal, subTypes }.
+    detailAddOns: jsonArray(f.detailAddOns),
+
+    // ── detail-page attributes ─────────────────────────────────────────────
+    /** DHA's own speciality list for the FACILITY (not its professionals'). */
+    specialities: jsonArray(f.specialities),
+    /** Named medical director, as printed by DHA. */
+    medicalDirector: nz(f.medicalDirector),
+    /** The emirate//city DHA records as the facility's headquarters. */
+    headquarters: nz(f.headquarters),
+    /**
+     * Each entry: { accreditingBody, accreditationName, accreditationType,
+     * accreditationTypeCode, issuedDate, validUntil }. Only 6.1% of facilities
+     * carry any — that is DHA's own sparsity, not a gap in the crawl.
+     */
+    accreditations: jsonArray(f.accreditations),
+    /**
+     * Operating hours. DHA renders this section on the detail page but leaves
+     * it empty for every one of the 5,851 facilities crawled — 0% coverage,
+     * verified across the full set. Kept null rather than filled from any
+     * other source; `addOns`/`detailAddOns` are the only published thing
+     * resembling "facility operation" and are NOT hours.
+     */
+    operatingHours: nz(f.operatingHours),
+    // Genuinely absent from every public DHA facility endpoint.
+    licenceNumber: null,
+    status: null,
+    facilityOperation: null,
+    /**
+     * A PATH to the photo, never the photo itself.
+     *
+     * DHA returns the image as raw base64 PNG bytes. Inlining them put 51 MB
+     * of base64 into facilities.json for 553 of 5,652 facilities — a file the
+     * directory loads on EVERY page, so 90% of readers paid for images they
+     * would never see and the bundle grew 4.4 MB -> 66.6 MB. The bytes are
+     * written once to facility-images/ below and referenced here, so a photo
+     * costs only the facility page that actually shows it.
+     */
+    facilityImage: f.facilityImage ? `facility-images/${f.id}.png` : null,
+    dhaFetchedAt: f.dhaFetchedAt ?? null,
+    dhaDetailFetchedAt: f.detailFetchedAt ?? null,
+    /** Set by the roster pass below when DHA's facility-side search covered it. */
+    dhaRoster: null,
+    /** How many professionals DHA's facility listing returns. Null = the
+     *  facility-side search has not covered this facility, which is different
+     *  from "the register lists nobody" (that would be 0). */
+    listedByTheRegister: null,
   };
 });
+// ── facility photos, written once as real PNG files ─────────────────────────
+// Decoded from DHA's base64 and written beside the dataset so facilities.json
+// carries a path instead of 51 MB of inlined bytes. Only facilities DHA gives a
+// photo for get a file; the rest keep facilityImage: null and render nothing.
+{
+  const imageDir = resolve(outDir, 'facility-images');
+  let written = 0;
+  let bytes = 0;
+  for (const f of facilityRows) {
+    if (typeof f.facilityImage !== 'string' || f.facilityImage.trim() === '') continue;
+    if (written === 0) mkdirSync(imageDir, { recursive: true });
+    // DHA sends bare base64 with no data: prefix; tolerate one anyway.
+    const b64 = f.facilityImage.replace(/^data:[^,]*,/, '');
+    const buf = Buffer.from(b64, 'base64');
+    // A PNG starts with the 8-byte signature 89 50 4E 47 0D 0A 1A 0A. Anything
+    // else is not the image DHA claimed, so it is skipped rather than written
+    // out as a corrupt file the page would try to render.
+    if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e || buf[3] !== 0x47) continue;
+    writeFileSync(resolve(imageDir, `${f.id}.png`), buf);
+    written++;
+    bytes += buf.length;
+  }
+  console.log(`  facility photos  ${written} PNG files, ${(bytes / 1048576).toFixed(1)} MB, kept out of facilities.json`);
+}
+
 // name -> facility dictionary index, for linking doctors by their facility string
 const facilityIndexByName = new Map(facilities.map((f, i) => [f.name, i]));
 // facility row id -> dictionary index, for linking via the join table
@@ -463,6 +618,28 @@ for (const d of stmt.iterate()) {
     licensedIdxs,
   ]);
 }
+// Facility-side roster coverage, read while the database is still open. The
+// query has to live here rather than beside the facility counts below, because
+// the connection is closed on the next line.
+// `updatedAt` is optional for the same reason the facility attributes are: a
+// fixture database built for the relationship tests carries only the columns
+// those tests exercise. The roster COUNT is the load-bearing value; the
+// timestamp is provenance, so it degrades to null rather than failing.
+const dfColumns = new Set(
+  db.prepare('select name from pragma_table_info(?)').all('DoctorFacility').map((r) => r.name),
+);
+const seenExpr = dfColumns.has('updatedAt') ? 'max(updatedAt)' : 'null';
+const dhaRosterByFacilityId = new Map(
+  db
+    .prepare(
+      `select facilityId, count(distinct doctorId) n, ${seenExpr} seen
+         from DoctorFacility where sourceSection = 'facility_roster'
+        group by facilityId`,
+    )
+    .all()
+    .map((r) => [r.facilityId, r]),
+);
+
 db.close();
 
 // ── resolve per-facility role titles to dictionary indexes ──────────────────
@@ -517,6 +694,47 @@ db.close();
     for (const fi of new Set(r[12])) perLicensed.set(fi, (perLicensed.get(fi) ?? 0) + 1);
   }
   for (let i = 0; i < facilities.length; i++) facilities[i].licensedCount = perLicensed.get(i) ?? 0;
+
+  // ── the two professional counts, named apart ───────────────────────────────
+  // These are DIFFERENT METRICS and must never be collapsed into one number:
+  //
+  //   professionalsWorkingHere  professionals holding an ACTIVE current licence
+  //                             corroborated at this facility. This is the set
+  //                             the page actually lists, so it is the one a
+  //                             reader can click through and count.
+  //   listedByTheRegister       how many professionals DHA's own facility-side
+  //                             search returns for this facility. Validated to
+  //                             equal the roster we actually stored.
+  //
+  // The gap between them is expected and explainable: the register's facility
+  // listing includes professionals whose licence record does not independently
+  // corroborate this workplace, which the staff rule deliberately excludes.
+  // A difference is information, not an error — and never a reason to remove.
+  for (const f of facilities) f.professionalsWorkingHere = f.licensedCount;
+
+  // ── DHA facility-side roster coverage ──────────────────────────────────────
+  // The facility_roster rows come from querying DHA's search by facilityName —
+  // the register's own facility-side view. Recording how many professionals DHA
+  // lists there, beside our own count, lets a reader see the two agree (or not)
+  // instead of having to trust one number. It is EVIDENCE, never a correction:
+  // DHA's facility view lists only CURRENT professionals while the directory
+  // also holds employment history, so a lower DHA figure is expected and is
+  // never treated as a removal.
+  {
+    let covered = 0;
+    for (const f of facilities) {
+      const r = dhaRosterByFacilityId.get(f.id);
+      if (!r) continue;
+      covered++;
+      f.listedByTheRegister = r.n;
+      f.dhaRoster = {
+        listedByDha: r.n,
+        checkedAt: r.seen ?? null,
+        source: 'DHA medical-directory search, filtered to this facility',
+      };
+    }
+    relStats.facilitiesWithDhaRoster = covered;
+  }
   // NOTE: facilities must NOT be re-sorted here. A facility's position in this
   // array IS its dictionary index, and doctor rows already reference it.
   // Consumers that want "most staffed first" sort a copy at read time.
