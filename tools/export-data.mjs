@@ -91,6 +91,7 @@ const OPTIONAL_FACILITY_COLUMNS = [
   'makaniNumber', 'addressLine', 'facilityImage', 'addOns', 'addOnCount', 'dhaFetchedAt',
   'telephone', 'email', 'website', 'fullAddress', 'operatingHours', 'accreditations',
   'specialities', 'medicalDirector', 'headquarters', 'detailAddOns', 'detailFetchedAt',
+  'foundedInDubai', 'description',
 ];
 const optionalSelect = OPTIONAL_FACILITY_COLUMNS
   .map((c) => (facilityColumns.has(c) ? `f.${c}` : `null as ${c}`))
@@ -115,6 +116,52 @@ const facilityRows = db.prepare(`
 const nz = (v) => {
   const s = typeof v === 'string' ? v.trim() : '';
   return s === '' ? null : s;
+};
+
+/**
+ * DHA's opening-hours payload -> [{ day, label }], or null.
+ *
+ * The stored value is the register's own JSON, shaped
+ *   { "Sunday": { is24Hours, isClosed, timeIntervals:[{StartDropDown,EndDropDown}] }, … }
+ *
+ * The conversion mirrors the page's own populateOperatingHours(): 24-hour and
+ * closed days short-circuit, otherwise each interval is rendered from its two
+ * 24-hour integers, with DHA's own edge cases for 12 and for 24/0 meaning
+ * midnight. Days the register omits are omitted here; a payload that yields no
+ * usable day returns null so the section disappears rather than showing an
+ * empty table.
+ */
+const HOUR_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const hoursList = (v) => {
+  if (typeof v !== 'string' || v.trim() === '') return null;
+  let o;
+  try { o = JSON.parse(v); } catch { return null; }
+  if (!o || typeof o !== 'object') return null;
+
+  const clock = (h) => {
+    // DHA: 24 and 0 both mean midnight; 12 stays midday.
+    if (h === 0 || h === 24) return '12 AM';
+    if (h === 12) return '12 PM';
+    return h > 12 ? `${h - 12} PM` : `${h} AM`;
+  };
+  const out = [];
+  for (const day of HOUR_DAYS) {
+    const d = o[day];
+    if (!d) continue;
+    if (d.is24Hours === true || d.is24Hours === 'true') { out.push({ day, label: '24 hours' }); continue; }
+    if (d.isClosed === true || d.isClosed === 'true') { out.push({ day, label: 'Closed' }); continue; }
+    const spans = (Array.isArray(d.timeIntervals) ? d.timeIntervals : [])
+      .map((iv) => {
+        const s = parseInt(iv?.StartDropDown, 10);
+        const e = parseInt(iv?.EndDropDown, 10);
+        return Number.isFinite(s) && Number.isFinite(e) ? `${clock(s)} – ${clock(e)}` : null;
+      })
+      .filter(Boolean);
+    // A day with neither a flag nor a usable interval says nothing; omit it
+    // rather than printing an empty row.
+    if (spans.length) out.push({ day, label: spans.join(', ') });
+  }
+  return out.length ? out : null;
 };
 
 /** A column stored as a JSON array string -> array, or null. Never invents. */
@@ -216,13 +263,29 @@ const facilities = facilityRows.map((f, i) => {
      */
     accreditations: jsonArray(f.accreditations),
     /**
-     * Operating hours. DHA renders this section on the detail page but leaves
-     * it empty for every one of the 5,851 facilities crawled — 0% coverage,
-     * verified across the full set. Kept null rather than filled from any
-     * other source; `addOns`/`detailAddOns` are the only published thing
-     * resembling "facility operation" and are NOT hours.
+     * Opening hours, as a ready-to-render list of { day, label }.
+     *
+     * DHA ships these as a JSON string in a `retrievedOperatingHours` JS
+     * variable and assembles the list client-side, which is why a static
+     * parse originally captured none of them. 1,313 facilities publish them;
+     * the rest leave the variable empty and stay null here.
+     *
+     * The label is computed with DHA's own arithmetic (see hoursList) so the
+     * directory shows what the register shows. Formatting published times is
+     * not invention — but nothing is ever inferred: a facility with no payload
+     * gets null, never a guessed "24 hours" or a default week.
      */
-    operatingHours: nz(f.operatingHours),
+    operatingHours: hoursList(f.operatingHours),
+    /** The year DHA records the facility as founded in Dubai. */
+    foundedInDubai: nz(f.foundedInDubai),
+    /**
+     * The facility's own published blurb, VERBATIM.
+     *
+     * Only ~7% of facilities wrote one. It is never summarised, rewritten or
+     * generated, and prose inside it that happens to mention opening times is
+     * left as prose — it is never promoted into `operatingHours`.
+     */
+    description: nz(f.description),
     // Genuinely absent from every public DHA facility endpoint.
     licenceNumber: null,
     status: null,

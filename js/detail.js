@@ -916,27 +916,6 @@ function facilityPager(facilityId) {
 }
 
 /**
- * Contact, location and operating information, as the register publishes it.
- *
- * The register DOES publish a facility's category, coordinates, area and street
- * address — through its facility registry and the per-facility lookup its map
- * uses. It does NOT publish a phone number, an email address, a website, an
- * accreditation list or opening hours anywhere public.
- *
- * So each field renders only when it actually has a value, and the footnote
- * names what the register withholds. A blank is never left to look like a
- * failed fetch, and nothing here is filled in from another source.
- */
-/**
- * Contact rows for a facility, in one place so the facility page and the
- * professional page cannot disagree about what the register publishes.
- *
- * Only fields that HAVE a value produce a row. Nothing is rendered as an empty
- * slot, a dash, or "not available" — an absent field simply is not there.
- * Every value comes from DHA's own facility endpoints; none is inferred, and
- * none is taken from a third party.
- */
-/**
  * The facility's published contact rows: phone, email, website, address.
  *
  * Only fields that HAVE a value produce a row. Nothing is rendered as an empty
@@ -954,7 +933,7 @@ function facilityContactRows(f) {
 
   if (c.phone) {
     // tel: cannot carry spaces or punctuation reliably.
-    rows.push({ icon: ICON.phone, label: 'Phone', value: c.phone, href: `tel:${String(c.phone).replace(/[^\d+]/g, '')}` });
+    rows.push({ icon: ICON.phone, label: 'Telephone', value: c.phone, href: `tel:${String(c.phone).replace(/[^\d+]/g, '')}` });
   }
   if (c.email) rows.push({ icon: ICON.mail, label: 'Email', value: c.email, href: `mailto:${c.email}` });
   if (c.website) {
@@ -972,53 +951,30 @@ function facilityContactRows(f) {
 }
 
 /**
- * One contact card: the whole card is the action when there is one.
- *
- * A card rather than a row, so phone / email / website can sit side by side as
- * equal targets. An address has nowhere to go and renders as a plain card
- * instead of a dead link.
- */
-const contactCard = (r) => (r.href
-  ? `<a class="fcontact-card" href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ''}>
-      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
-      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
-      <span class="fcontact-go" aria-hidden="true">${r.external ? ICON.ext : ICON.chevron}</span>
-    </a>`
-  : `<div class="fcontact-card is-static">
-      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
-      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
-    </div>`);
-
-/** One contact row: a link when there is somewhere to go, otherwise a fact. */
-const contactRow = (r) => (r.href
-  ? `<li><a class="fcontact-row" href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ''}>
-      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
-      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
-      <span class="fcontact-go" aria-hidden="true">${r.external ? ICON.ext : ICON.chevron}</span>
-    </a></li>`
-  : `<li><span class="fcontact-row is-static">
-      <span class="fcontact-ico" aria-hidden="true">${r.icon}</span>
-      <span class="fcontact-text"><b>${esc(r.label)}</b><em>${esc(r.value)}</em></span>
-    </span></li>`);
-
-/**
  * "Published contact" — the register's own wording for these fields.
  *
  * Renders nothing at all when this facility has none of them, rather than an
  * empty section or a note explaining the absence.
  */
-function facilityContactBlock(f) {
+function facilityContactAside(f) {
   const rows = facilityContactRows(f);
+  // No card at all rather than a heading over nothing. A facility with no
+  // published contact simply has one less card in the column.
   if (!rows.length) return '';
-  // Phone / email / website are short, comparable values, so they sit side by
-  // side as equal cards. The address is a sentence, not a value, so it gets a
-  // full-width row of its own beneath rather than being squeezed into a third
-  // of the width. A facility missing any of them simply has fewer cards.
-  const compact = rows.filter((r) => r.label !== 'Address');
-  const address = rows.find((r) => r.label === 'Address');
-  return block('Published contact', `
-    ${compact.length ? `<div class="fcontact-cards">${compact.map(contactCard).join('')}</div>` : ''}
-    ${address ? `<div class="fcontact-cards fcontact-cards-wide">${contactCard(address)}</div>` : ''}`);
+  return `<div class="aside-card aside-contact">
+    <h3>Published contact</h3>
+    <dl class="pcontact">
+      ${rows.map((r) => `<div class="pcontact-row">
+        <dt>
+          <span class="pcontact-ico" aria-hidden="true">${r.icon}</span>
+          ${esc(r.label)}
+        </dt>
+        <dd>${r.href
+          ? `<a href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ''}>${esc(r.value)}${r.external ? ` <span aria-hidden="true">${ICON.ext}</span>` : ''}</a>`
+          : esc(r.value)}</dd>
+      </div>`).join('')}
+    </dl>
+  </div>`;
 }
 
 /**
@@ -1122,6 +1078,27 @@ function facilityAccreditationsBlock(f) {
 }
 
 /**
+ * Opening hours, when the register publishes them.
+ *
+ * `f.operatingHours` arrives from the exporter already shaped as
+ * [{ day, label }] — the label computed with DHA's own arithmetic — so this
+ * renders it and nothing more. 1,313 of 5,652 facilities have it; the other
+ * 4,339 get no section at all rather than an empty table or a default week.
+ *
+ * Prose in `description` that mentions opening times is NOT a source here and
+ * is never promoted into this section.
+ */
+function facilityHoursBlock(f) {
+  const hours = Array.isArray(f.operatingHours) ? f.operatingHours : null;
+  if (!hours || !hours.length) return '';
+  return block('Opening hours', `<dl class="fhours">
+    ${hours.map((h) => `<div class="fhours-row${/closed/i.test(h.label) ? ' is-closed' : ''}">
+      <dt>${esc(h.day)}</dt><dd>${esc(h.label)}</dd>
+    </div>`).join('')}
+  </dl>`);
+}
+
+/**
  * DHA's own term is "add-ons": extra permits or services recorded against the
  * facility. The register's wording is kept rather than reinterpreted. The
  * detail page's list is richer (each entry is an object), so prefer it.
@@ -1161,28 +1138,39 @@ function facilityView(id) {
   };
   const provenanceShort = TYPE_PROVENANCE_SHORT[f.typeSource] ?? TYPE_PROVENANCE_SHORT.name;
 
+  // The category line under the title, then where it is. Both are published
+  // fields; either is dropped when the register does not give it, so the line
+  // never renders a stray separator around nothing.
+  const categoryLabel = f.dhaCategory || type || '';
+  const place = [f.location?.area, f.location?.city, f.location?.emirate].filter(Boolean);
+  const placeText = [...new Set(place)].join(', ');
+
   const sub = [];
   // The hero states the same figure the cards and the people list use: the
   // facility's staff. A different number here would read as a contradiction.
   sub.push(`<b>${num(licensed)}</b> licensed ${licensed === 1 ? 'professional' : 'professionals'}`);
 
   return `
-  <article class="detail" role="dialog" aria-modal="true" aria-label="${esc(f.name)}">
+  <article class="detail detail-facility" role="dialog" aria-modal="true" aria-label="${esc(f.name)}">
     ${crumbs('Facilities', 'facilities', f.name)}
 
-    <header class="detail-hero">
-      <div class="detail-ident">
-        <div class="avatar facility detail-avatar" aria-hidden="true">${ICON.facility}</div>
-        <div class="detail-headline">
-          <div class="detail-badges">
-            ${f.inDhaMasterList
-              ? `<span class="verified verified-solid">${ICON.shield}Verified</span>`
-              : '<span class="tag tag-amber">Not on the official facility list</span>'}
-            ${type ? `<span class="tag tag-blue">${esc(type)}</span>` : ''}
-          </div>
-          <h1 class="detail-name">${esc(f.name)}</h1>
-          <p class="detail-sub">${sub.join('<span class="detail-dot" aria-hidden="true"></span>')}</p>
+    ${/* Title, then category, then place — the reference's reading order. The
+          identity block carries no avatar tile here: at this size it competed
+          with the name for the top-left corner without adding information. */''}
+    <header class="detail-hero fac-hero">
+      <div class="fac-hero-main">
+        <div class="detail-badges">
+          ${f.inDhaMasterList
+            ? `<span class="verified verified-solid">${ICON.shield}Verified</span>`
+            : '<span class="tag tag-amber">Not on the official facility list</span>'}
         </div>
+        <h1 class="detail-name">${esc(f.name)}</h1>
+        <p class="fac-hero-meta">
+          ${categoryLabel ? `<span class="fac-hero-cat">${esc(categoryLabel)}</span>` : ''}
+          ${categoryLabel && placeText ? '<span class="detail-dot" aria-hidden="true"></span>' : ''}
+          ${placeText ? `<span class="fac-hero-place">${ICON.pin}${esc(placeText)}</span>` : ''}
+        </p>
+        <p class="detail-sub">${sub.join('<span class="detail-dot" aria-hidden="true"></span>')}</p>
       </div>
       <div class="detail-actions">
         ${f.sourceUrl ? `<a class="btn btn-primary" href="${esc(f.sourceUrl)}" target="_blank" rel="noopener">View on the official register ${ICON.ext}</a>` : ''}
@@ -1201,7 +1189,17 @@ function facilityView(id) {
               actually holds. `f.listedByTheRegister` is still exported and
               still in the dataset — it is simply not surfaced here, so the
               page cannot present two numbers a reader has to reconcile. */''}
-        ${block('About this facility', `
+        ${/* ABOUT — facts, never prose.
+              The register publishes no description for any facility, so there
+              is nothing to write a paragraph from. Rather than generate
+              marketing copy, About states what the register actually holds:
+              the staff figure, the category, who directs it and from where.
+              Every row disappears when its field is absent. */''}
+        ${block('About', `
+          ${/* The facility's OWN words, verbatim as the register published
+                them. Not summarised, not rewritten, not generated — and shown
+                only for the ~7% who wrote one. */''}
+          ${f.description ? `<p class="fac-desc">${esc(f.description)}</p>` : ''}
           <div class="fstats">
             <div class="fstat">
               <b>${num(licensed)}</b>
@@ -1216,9 +1214,10 @@ function facilityView(id) {
             ${frow('DHA facility ID', f.dhaFacilityId ? `<span class="mono">${esc(f.dhaFacilityId)}</span>` : '')}
             ${frow('Medical director', f.medicalDirector ? esc(f.medicalDirector) : '')}
             ${frow('Headquarters', f.headquarters ? esc(f.headquarters) : '')}
+            ${frow('Founded in Dubai', f.foundedInDubai ? esc(f.foundedInDubai) : '')}
           </dl>`)}
 
-        ${facilityContactBlock(f)}
+        ${facilityHoursBlock(f)}
 
         ${/* ONE specialties section, immediately above the people it filters.
               It is built from the SAME population as the list below
@@ -1263,6 +1262,10 @@ function facilityView(id) {
           <p>Narrow the whole directory to the ${num(f.doctorCount)} professionals linked to this facility, however they are linked.</p>
           <button class="btn btn-primary" type="button" data-facility-filter="${esc(f.name)}">Show these professionals</button>
         </div>
+        ${/* Published contact sits in this column, under the filter card. It
+              was in the main flow; here it stays beside the reader as they
+              move down the page, which is where a phone number is useful. */''}
+        ${facilityContactAside(f)}
       </aside>
     </div>
   </article>`;

@@ -1,54 +1,54 @@
 {
-  "generatedAt": "2026-08-30T14:11:35.671Z",
+  "generatedAt": "2026-09-01T16:05:25.862Z",
   "dataDir": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\Healthcare_Directory\\data.staging",
   "dbPath": "C:\\Users\\Ruba\\Desktop\\ScrapeFlow\\backend\\prisma\\dev.db",
   "ok": true,
   "source": {
-    "doctors": 103056,
-    "allTimeDoctors": 105039,
-    "removedDoctors": 1983,
+    "doctors": 102932,
+    "allTimeDoctors": 105168,
+    "removedDoctors": 2236,
     "facilities": 5652,
-    "relationships": 396016,
-    "currentRelationships": 307103,
-    "distinctCurrentPairs": 158363,
-    "licenceRows": 106905,
+    "relationships": 471269,
+    "currentRelationships": 382640,
+    "distinctCurrentPairs": 159738,
+    "licenceRows": 106646,
     "licenceByType": [
       {
         "licenceType": "Full-time License",
-        "n": 72118
+        "n": 72048
       },
       {
         "licenceType": "Part-time License",
-        "n": 3667
+        "n": 3657
       },
       {
         "licenceType": "Registered Only",
-        "n": 31088
+        "n": 30909
       },
       {
         "licenceType": "Trainee License",
         "n": 32
       }
     ],
-    "doctorsWithNoCurrentRel": 31212,
+    "doctorsWithNoCurrentRel": 30203,
     "duplicateRelationships": 0,
     "orphanRelationships": 0,
-    "collapsedStillStored": 12403
+    "collapsedStillStored": 12395
   },
   "export": {
-    "doctors": 103056,
+    "doctors": 102932,
     "facilities": 5652,
-    "currentPairs": 158363,
-    "doctorsWithNoFacility": 31212,
-    "doctorsMultiFacility": 14903,
+    "currentPairs": 159738,
+    "doctorsWithNoFacility": 30203,
+    "doctorsMultiFacility": 15215,
     "maxFacilitiesPerDoctor": 47,
-    "doctorsMultiLicence": 6434,
+    "doctorsMultiLicence": 6424,
     "schemaVersion": 6,
     "licenceTypeSource": "doctor_licence_type",
     "licenceFacet": {
-      "Full-time License": 72563,
-      "Registered Only": 33258,
-      "Part-time License": 3667,
+      "Full-time License": 72522,
+      "Registered Only": 33175,
+      "Part-time License": 3657,
       "Trainee License": 32
     }
   },
@@ -56,7 +56,7 @@
     {
       "name": "no de-listed professional is published as active",
       "level": "PASS",
-      "detail": "1983 removed professionals, none exported"
+      "detail": "2236 removed professionals, none exported"
     },
     {
       "name": "every active professional is exported",
@@ -71,27 +71,27 @@
     {
       "name": "meta records the lifecycle it filtered on",
       "level": "PASS",
-      "detail": "meta.lifecycle={\"source\":\"doctor_removed_at\",\"totalDoctorRecords\":105039,\"activeDoctors\":103056,\"removedDoctors\":1983} vs source active 103056"
+      "detail": "meta.lifecycle={\"source\":\"doctor_removed_at\",\"totalDoctorRecords\":105168,\"activeDoctors\":102932,\"removedDoctors\":2236} vs source active 102932"
     },
     {
       "name": "meta.exclusions counts the removed set",
       "level": "PASS",
-      "detail": "meta 1983 vs db 1983"
+      "detail": "meta 2236 vs db 2236"
     },
     {
       "name": "register lifecycle",
       "level": "NOTE",
-      "detail": "103056 active of 105039 Doctor rows · 1983 de-listed and withheld"
+      "detail": "102932 active of 105168 Doctor rows · 2236 de-listed and withheld"
     },
     {
       "name": "doctor count matches the source",
       "level": "PASS",
-      "detail": "export 103056 vs db 103056"
+      "detail": "export 102932 vs db 102932"
     },
     {
       "name": "meta.totals.doctors agrees with the rows",
       "level": "PASS",
-      "detail": "meta 103056 vs rows 103056"
+      "detail": "meta 102932 vs rows 102932"
     },
     {
       "name": "facility count matches the source",
@@ -121,27 +121,27 @@
     {
       "name": "every current doctor-facility pair is exported",
       "level": "PASS",
-      "detail": "export 158363 vs db 158363"
+      "detail": "export 159738 vs db 159738"
     },
     {
       "name": "multi-facility doctors are present",
       "level": "PASS",
-      "detail": "14903 doctors with 2+ facilities, max 47"
+      "detail": "15215 doctors with 2+ facilities, max 47"
     },
     {
       "name": "every licence-type facet matches the source",
       "level": "PASS",
-      "detail": "Full-time License: export 72563 vs source 72563 | Registered Only: export 33258 vs source 33258 | Part-time License: export 3667 vs source 3667 | Trainee License: export 32 vs source 32"
+      "detail": "Full-time License: export 72522 vs source 72522 | Registered Only: export 33175 vs source 33175 | Part-time License: export 3657 vs source 3657 | Trainee License: export 32 vs source 32"
     },
     {
       "name": "meta reports how many professionals used the licence fallback",
       "level": "PASS",
-      "detail": "meta 2615 vs source 2615"
+      "detail": "meta 2740 vs source 2740"
     },
     {
       "name": "licence types taken from the primary scalar",
       "level": "NOTE",
-      "detail": "2615 professionals have no DoctorLicenceType row — they hold the single type the search DTO publishes. Run scripts/sync-licence-types.mjs --crawl to give them the full set."
+      "detail": "2740 professionals have no DoctorLicenceType row — they hold the single type the search DTO publishes. Run scripts/sync-licence-types.mjs --crawl to give them the full set."
     },
     {
       "name": "licence type is modelled as a set",
@@ -181,27 +181,32 @@
     {
       "name": "every primary doctor-facility pair is exported",
       "level": "PASS",
-      "detail": "export 70395 vs db 70395"
+      "detail": "export 70321 vs db 70321"
     },
     {
       "name": "primary vs all-linked totals",
       "level": "NOTE",
-      "detail": "70395 primary pairs across 5496 facilities, vs 158363 all-linked pairs"
+      "detail": "70321 primary pairs across 5489 facilities, vs 159738 all-linked pairs"
     },
     {
       "name": "every ACTIVE-licence facility appears in the all-linked set",
       "level": "PASS",
-      "detail": "156843 active-licence pairs, none missing"
+      "detail": "156738 active-licence pairs, none missing"
     },
     {
-      "name": "the facility-staff population is exactly the active-licence set",
+      "name": "the facility-staff population is exactly the corroborated workplace set",
       "level": "PASS",
-      "detail": "156843 pairs, no missing and no unexpected relationship"
+      "detail": "76364 pairs, no missing and no unexpected relationship"
     },
     {
-      "name": "no professional is licensed at the same facility twice",
+      "name": "no professional is staffed at the same facility twice",
       "level": "PASS",
       "detail": "0 rows"
+    },
+    {
+      "name": "licence coverage vs workplace",
+      "level": "NOTE",
+      "detail": "156738 active-licence pairs, of which 76364 are corroborated as workplaces; the other 80374 are facilities a licence covers (\"Other Facilities\") and stay in all-linked"
     },
     {
       "name": "every facility carries a licensedCount matching its listed people",
@@ -216,12 +221,12 @@
     {
       "name": "facility staff vs the other populations",
       "level": "NOTE",
-      "detail": "156843 licensed pairs · 70395 primary · 158363 all-linked"
+      "detail": "76364 licensed pairs · 70321 primary · 159738 all-linked"
     },
     {
       "name": "every current-licence facility survives into the all-linked set",
       "level": "PASS",
-      "detail": "156859 licensed pairs, none dropped"
+      "detail": "156755 licensed pairs, none dropped"
     },
     {
       "name": "no professional lists the same facility twice",
@@ -231,12 +236,12 @@
     {
       "name": "current licences collapsed to relationships",
       "level": "NOTE",
-      "detail": "161058 licence rows (161041 active) -> 156859 unique (professional, facility) pairs across 70763 professionals"
+      "detail": "160948 licence rows (160930 active) -> 156755 unique (professional, facility) pairs across 70684 professionals"
     },
     {
       "name": "relationships resting on a non-active current licence",
       "level": "NOTE",
-      "detail": "16 pairs come from a licence the register does not label \"Active License\". They are retained: DHA lists them under Current licences, and dropping them would remove a relationship the source still publishes."
+      "detail": "17 pairs come from a licence the register does not label \"Active License\". They are retained: DHA lists them under Current licences, and dropping them would remove a relationship the source still publishes."
     },
     {
       "name": "every per-facility role override is supported by the source",
@@ -251,12 +256,12 @@
     {
       "name": "meta counts the role overrides",
       "level": "PASS",
-      "detail": "meta 2643 vs rows 2643"
+      "detail": "meta 2637 vs rows 2637"
     },
     {
       "name": "per-facility roles",
       "level": "NOTE",
-      "detail": "2643 (doctor, facility) pairs where the register's licence title differs from the professional-level specialty; every other pair uses the professional-level value"
+      "detail": "2637 (doctor, facility) pairs where the register's licence title differs from the professional-level specialty; every other pair uses the professional-level value"
     },
     {
       "name": "every facility carries a classified type",
@@ -286,7 +291,7 @@
     {
       "name": "facility types in the export",
       "level": "NOTE",
-      "detail": "pharmacy=1639 · medical_center=600 · clinic=514 · dental=439 · optical=434 · education=395 · polyclinic=325 · aesthetic=260 · home_healthcare=189 · hospital=168 · center=137 · alternative=115 · physiotherapy=111 · mental_health=54 · wellness=50 · laboratory=47 · nursing=44 · day_surgery=38 · diagnostic_center=30 · fitness=30 · maternity=11 · medical_supplier=11 · occupational=9 · other=2"
+      "detail": "pharmacy=1639 · medical_center=600 · clinic=514 · dental=439 · optical=434 · education=395 · polyclinic=325 · aesthetic=260 · home_healthcare=189 · hospital=168 · center=138 · alternative=115 · physiotherapy=110 · mental_health=54 · wellness=50 · laboratory=47 · nursing=44 · day_surgery=38 · diagnostic_center=30 · fitness=30 · maternity=11 · medical_supplier=11 · occupational=9 · other=2"
     },
     {
       "name": "facility type source",
@@ -294,49 +299,34 @@
       "detail": "name=5373 · staff=194 · dha_type=83 · unclassified=2"
     },
     {
-      "name": "every education record is exported",
-      "level": "PASS",
-      "detail": "export 181350 vs source 181350"
-    },
-    {
-      "name": "every professional with education has a profile record",
-      "level": "PASS",
-      "detail": "export 91975 vs source 91975"
-    },
-    {
-      "name": "every work-history record is exported",
-      "level": "PASS",
-      "detail": "export 332880 vs source 332880"
-    },
-    {
-      "name": "repeated sections exported",
+      "name": "profile shards not in this dataset",
       "level": "NOTE",
-      "detail": "education 181350 entries across 91975 professionals · work 332880 across 100438"
+      "detail": "education and work history are reported by flag only"
     },
     {
       "name": "professionals with no current facility",
       "level": "NOTE",
-      "detail": "31212 in the export / 31212 in the source — facility name absent or unresolvable"
+      "detail": "30203 in the export / 30203 in the source — facility name absent or unresolvable"
     },
     {
       "name": "the export agrees with the source on who has no facility",
       "level": "PASS",
-      "detail": "export 31212 vs db 31212"
+      "detail": "export 30203 vs db 30203"
     },
     {
       "name": "collapsed lists not yet expanded",
       "level": "NOTE",
-      "detail": "62 of 12403 profiles have no expanded relationships — run scripts/backfill-collapsed-facilities.mjs"
+      "detail": "62 of 12395 profiles have no expanded relationships — run scripts/backfill-collapsed-facilities.mjs"
     },
     {
       "name": "relationship rows by kind",
       "level": "NOTE",
-      "detail": "total 396016, current 307103, distinct current pairs 158363"
+      "detail": "total 471269, current 382640, distinct current pairs 159738"
     },
     {
       "name": "multi-licence doctors in the export",
       "level": "NOTE",
-      "detail": "6434"
+      "detail": "6424"
     }
   ]
 }

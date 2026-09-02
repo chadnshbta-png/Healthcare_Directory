@@ -2128,3 +2128,78 @@ a.fcontact-card:hover .fcontact-go{opacity:1}
 /* "All" leads the specialty row and is selected whenever nothing else is, so
    the row always shows exactly one active chip. */
 .spec-chip-all{font-variant-numeric:tabular-nums}
+
+/* ═══ FACILITY DETAIL — reference-inspired hierarchy ════════
+   Title, then category, then place: the order a reader scans a directory
+   listing. Doctorna's own palette and type throughout. */
+.fac-hero{align-items:start}
+.fac-hero-main{min-width:0}
+/* The name leads. The identity tile that used to sit beside it competed for
+   the same corner without adding anything the title did not already say. */
+.detail-facility .detail-name{margin-top:10px}
+.fac-hero-meta{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:10px;
+  font-size:14.5px;color:var(--ink-3);
+}
+.fac-hero-cat{font-weight:700;color:var(--blue-deep)}
+.fac-hero-place{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.fac-hero-place svg{width:15px;height:15px;flex:none;color:var(--muted-2)}
+.detail-facility .detail-sub{margin-top:8px}
+
+/* ── published contact, in the right column under the filter card ─────
+   Label above value, one per row: a phone number and an address are different
+   shapes and reading them as a two-column table forced both to be short.
+   Only rows with real values are ever emitted, so there is no empty state. */
+.aside-contact .pcontact{display:flex;flex-direction:column;margin:0}
+.pcontact-row{padding:12px 0;border-top:1px solid var(--line-soft)}
+.pcontact-row:first-child{border-top:0;padding-top:2px}
+.pcontact-row:last-child{padding-bottom:2px}
+.pcontact-row dt{
+  display:flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted-2);font-weight:500;
+}
+.pcontact-ico{display:grid;place-items:center;width:15px;height:15px;flex:none;color:var(--blue-text)}
+.pcontact-ico svg{width:15px;height:15px}
+.pcontact-row dd{
+  margin-top:5px;font-size:14px;font-weight:650;color:var(--ink);
+  line-height:1.5;overflow-wrap:anywhere;
+}
+.pcontact-row dd a{
+  display:inline-flex;align-items:baseline;gap:6px;
+  color:var(--blue-text);text-decoration:none;overflow-wrap:anywhere;
+}
+.pcontact-row dd a:hover{color:var(--blue-ink);text-decoration:underline;text-underline-offset:2px}
+.pcontact-row dd a:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px}
+.pcontact-row dd a svg{width:12px;height:12px;flex:none;opacity:.6;align-self:center}
+
+@media (max-width:900px){
+  /* The sidebar stacks under the content; the contact card keeps its own
+     column rather than being stretched across the full width. */
+  .aside-contact{flex:1;min-width:260px}
+}
+@media (max-width:640px){
+  .fac-hero-meta{font-size:13.5px;gap:7px}
+}
+
+/* ── the facility's own published blurb, and its opening hours ─────────
+   Both render only when the register carries them. */
+.fac-desc{
+  margin:0 0 16px;font-size:15px;line-height:1.65;color:var(--ink-2);
+  max-width:68ch;overflow-wrap:anywhere;
+}
+.fhours{
+  display:flex;flex-direction:column;
+  border:1px solid var(--line);border-radius:var(--r-6);background:var(--card);overflow:hidden;
+}
+.fhours-row{
+  display:grid;grid-template-columns:minmax(110px,150px) minmax(0,1fr);gap:14px;
+  align-items:baseline;padding:11px 18px;border-top:1px solid var(--line-soft);
+}
+.fhours-row:first-child{border-top:0}
+.fhours-row dt{font-size:13.5px;font-weight:700;color:var(--ink)}
+.fhours-row dd{font-size:14px;font-weight:600;color:var(--blue-deep);font-variant-numeric:tabular-nums}
+.fhours-row.is-closed dd{color:var(--muted-2);font-weight:500}
+@media (max-width:640px){
+  .fhours-row{grid-template-columns:minmax(0,1fr) auto;gap:10px}
+}
